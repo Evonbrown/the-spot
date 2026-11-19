@@ -10,14 +10,7 @@
 
 import { connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-
-// The 5 roles, spelled exactly as in CLAUDE.md and in our database enum (user_role).
-export type UserRole =
-  | "customer"
-  | "counter_staff"
-  | "delivery_personnel"
-  | "manager"
-  | "supervisor";
+import type { UserRole } from "@/lib/auth/roles"; // the 5 role names live in roles.ts
 
 // What one row of the profiles table looks like (plus the email from Supabase Auth).
 export type Profile = {

@@ -17,6 +17,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ROLE_HOME, type UserRole } from "@/lib/auth/roles";
 
 /*
  * AuthFormState: what an action sends back to the form.
@@ -140,7 +141,7 @@ export async function logIn(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     // SECURITY: always the SAME message, whether the email doesn't exist or the
@@ -148,7 +149,17 @@ export async function logIn(
     return { error: "Email or password is incorrect.", fields };
   }
 
-  redirect("/");
+  // Send each role to its own screen (e.g. counter_staff -> /staff).
+  // We read the role from the database (RLS lets a user read their own profile),
+  // never from anything the browser sent.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", data.user.id)
+    .single();
+
+  const role = profile?.role as UserRole | undefined;
+  redirect(role ? ROLE_HOME[role] : "/");
 }
 
 /*

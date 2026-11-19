@@ -139,3 +139,64 @@ One section per part we build. Read these before presentations.
 - **Why this fix:** login and role information must be **fresh on every request**. If it were cached, someone whose role was removed, or who just logged out, might still be shown as logged in or keep their old role. The next part uses this same helper to protect pages, so it must never be stale.
 - **Trade-off:** the account area in the header can't be prepared in advance, so it appears a split second after the rest of the header. That's fine.
 - **Other fixes Next.js offered (not chosen):** `"use cache: private"` saves the result for a while, which risks a stale role. Moving the check into the browser (`"use client"`) breaks our "rules on the server" principle.
+
+---
+
+## Part 5: A screen for each role, and blocking pages (Build step 1)
+
+**Why:** SRS 3 Security requires role-based access, enforced by **server checks and RLS**. Without this, anyone could type `/manager` into the address bar.
+
+### Where each role goes after logging in
+| Role | Screen | Built in |
+|---|---|---|
+| customer | `/` (Home), `/menu` | steps 2, 3, 5 |
+| counter_staff | `/staff` | step 4 |
+| delivery_personnel | `/driver` | step 6 |
+| manager | `/manager` | step 7 |
+| supervisor | `/supervisor` | step 7 |
+
+**Strict rule (our decision):** each role can open **only its own screen**. A Manager can't open `/staff` either. We can widen this later.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/auth/roles.ts` | Application | One place for the role names, labels, each role's home screen (`ROLE_HOME`) and the protected paths. |
+| `src/lib/auth/require-role.ts` | Application | `requireRole([...])`, the page guard. Not logged in → `/login`. Wrong role → `/no-access`. |
+| `src/proxy.ts` | Application | Also sends **logged-out** visitors away from `/staff`, `/driver`, `/manager` and `/supervisor`. |
+| `src/lib/auth/actions.ts` | Application | `logIn` now reads your role from the database and sends you to your screen. |
+| `src/app/staff`, `driver`, `manager`, `supervisor` (`page.tsx`) | Presentation | Placeholder screens. Each one calls `requireRole` itself. |
+| `src/components/ScreenPlaceholder.tsx` | Presentation | The shared "coming soon" box for those screens (temporary). |
+| `src/app/no-access/page.tsx` | Presentation | "You don't have access to this page", with a button to your own screen. |
+| `src/components/RedirectIfLoggedIn.tsx` | Presentation | On `/login` and `/signup`: if you're already logged in, it sends you to your screen. |
+| `src/components/SiteHeader.tsx` | Presentation | Staff see a link to their own screen (Queue / Deliveries / Reports / Payments) instead of "Menu". |
+
+### Key concepts
+- **Authentication vs authorization:** authentication asks *who are you?* (logging in). Authorization asks *are you allowed here?* (your role). `requireRole` does both: no login → `/login`, wrong role → `/no-access`.
+- **Defence in depth (several layers of protection):**
+  1. `proxy.ts`: a quick check that sends logged-out visitors to `/login`. It doesn't look at roles.
+  2. `requireRole()` in **every** protected page: the real role check, on the server.
+  3. **RLS** in the database: even if a page check were missed, the database won't hand over rows you aren't allowed to see.
+  - The header link is only a shortcut, **not** security. Hiding a link doesn't stop someone typing the address.
+- **Why the check is in each page, not in a layout:** in this Next.js version, a layout doesn't re-run when you move between pages, so a check there could be skipped. The Next.js docs say to check close to the page or data. Later, each **Server Action** will call `requireRole` too, because an action can be called without the page.
+- **Nothing leaks before the check:** each protected page puts **all** its content inside the guarded component (inside `<Suspense>`). Nothing from the screen is sent until the role check has passed.
+
+### Possible lecturer questions
+- *What stops a customer from opening the Manager screen?* `requireRole(["manager"])` runs on the server and sends them to `/no-access`. Typing the address doesn't help.
+- *Why do you need the proxy if pages already check?* It's faster for logged-out visitors, and it's an extra layer. Security never depends on one check alone.
+- *Where does the app get the role from?* The `profiles` table, read on the server for the logged-in user. Never from anything the browser sends.
+
+---
+
+## ✅ Build step 1 complete: recap
+Step 1 was "Project setup, Supabase connection, auth (sign up / log in) and roles". It took 5 parts:
+1. **Supabase connection:** browser and server helpers, and the keys in `.env.local`.
+2. **`profiles` table:** the 5 roles as an enum. RLS means users see and edit only their own row, and can never change their role. A trigger makes every new sign-up a customer.
+3. **Design preview:** Home and Menu with sample items (Build step 2 swaps in the real database).
+4. **Sign up, log in, log out:** Server Actions with server-side checks, a proxy that keeps sessions fresh, and the `connection()` fix for the Blocking Route error.
+5. **Role screens and blocking:** each role is sent to its own screen. Protection comes in three layers: proxy, then `requireRole` on every page, then RLS.
+
+**How one request flows through our three layers** (example: a manager opens `/manager`):
+- `proxy.ts` sees a valid login cookie and lets the request through.
+- The page calls `requireRole(["manager"])` (Application layer).
+- That calls `getCurrentProfile()`, which reads the `profiles` row. RLS allows it because it's the manager's own row (Data layer).
+- The role matches, so the screen is shown (Presentation layer).

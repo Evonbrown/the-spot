@@ -12,12 +12,12 @@
  * save the new one in the cookies. Without this, users would be logged out at
  * random.
  *
- * (In the next part, this is also where we can send logged-out users away from
- *  protected pages.)
+ * It ALSO sends logged-out visitors away from the staff screens (see below).
  */
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { PROTECTED_PATHS } from "@/lib/auth/roles";
 
 export async function proxy(request: NextRequest) {
   // By default, let the request continue to the page unchanged.
@@ -50,7 +50,26 @@ export async function proxy(request: NextRequest) {
   });
 
   // This is the call that checks (and if needed, renews) the token.
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+  const isLoggedIn = Boolean(data?.claims);
+
+  /*
+   * QUICK FIRST CHECK: a logged-out visitor opening a staff screen (/staff,
+   * /driver, /manager, /supervisor) is sent to /login straight away.
+   * This is only the FIRST layer. The proxy doesn't check ROLES; requireRole()
+   * in each page does the real check, and RLS protects the data itself.
+   */
+  const path = request.nextUrl.pathname;
+  const isProtected = PROTECTED_PATHS.some(
+    (p) => path === p || path.startsWith(p + "/")
+  );
+
+  if (isProtected && !isLoggedIn) {
+    const redirectResponse = NextResponse.redirect(new URL("/login", request.url));
+    // Keep any cookie changes Supabase just made (e.g. clearing an expired session).
+    response.cookies.getAll().forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
+  }
 
   return response;
 }
