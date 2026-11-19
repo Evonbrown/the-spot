@@ -7,6 +7,7 @@ One section per part we build. Read these before presentations.
 ## ⚠️ Before deploying to Vercel (checklist)
 - [ ] **Turn email confirmation back ON:** Supabase dashboard → Authentication → Sign In / Providers → Email → "Confirm email". We switched it OFF during development (Part 2) so testing is faster. Supabase's free email service only sends a few emails per hour.
 - [ ] Delete the temporary `/test-connection` page (Part 1).
+- [ ] **Decide on student ID login** before Build step 8. The SRS says users log in with "email or student ID", but we built **email only** (Part 4). Decide whether to add student ID login, and how non-students would log in.
 
 ---
 
@@ -94,3 +95,47 @@ One section per part we build. Read these before presentations.
 ### Possible lecturer questions
 - *Where is "unavailable items cannot be added" enforced?* For now only on screen: the Add button is `disabled`. When we build the cart and checkout, the **server** will also reject unavailable items, because CLAUDE.md says rules must never live only in the browser.
 - *Why no stock count?* The client said food never runs out, so we use `isAvailable` instead of inventory tracking.
+
+---
+
+## Part 4: Sign up, log in and log out (Build step 1)
+
+**Why:** SRS 3 Security says login is required, and passwords are handled by Supabase Auth, which stores them hashed. Every later feature needs to know **who** the user is and **what role** they have.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/auth/actions.ts` | Application | Server Actions `signUp`, `logIn` and `logOut`. They check the input on the server, then call Supabase Auth. |
+| `src/lib/auth/get-profile.ts` | Application | `getCurrentProfile()`: returns the logged-in user's profile (name, phone, role), or `null`. Also the `UserRole` type. |
+| `src/proxy.ts` | Application | Runs before every page request and renews the login token when it expires (about every hour). |
+| `src/components/SignUpForm.tsx` | Presentation | Sign-up form (Client Component) |
+| `src/components/LoginForm.tsx` | Presentation | Log-in form for every role (Client Component) |
+| `src/app/signup/page.tsx`, `src/app/login/page.tsx` | Presentation | The `/signup` and `/login` pages |
+| `src/components/SiteHeader.tsx` | Presentation | Shows "Log in", or your name, role and "Log out". Tapping "The Spot" goes home. |
+
+### Rules enforced (on the server, in `actions.ts`)
+- Full name required. **Phone required** (7–15 digits; spaces, dashes and a leading + allowed). Valid email.
+- **Password at least 8 characters.** Also set in the Supabase dashboard, so the rule is checked in two places.
+- Sign-up **never sends a role**. The Part 2 trigger always creates a `customer`.
+- A failed login always says **"Email or password is incorrect."** It never says which one, so attackers can't find out which emails have accounts.
+- Login is **email only** for now. Student ID login is still to decide (see the checklist at the top).
+
+### Key concepts
+- **Server Action:** a function that a form calls, but which runs **on the server** (`"use server"`). The browser can't skip its checks, which is why business rules live here.
+- **Server vs Client Components:** most components run on the server and send finished HTML. A component marked `"use client"` runs in the browser and can react to the user. We need that for showing errors and disabling the button while waiting.
+- **`useActionState`:** a React hook that connects a form to a Server Action. It gives back `state` (the latest result, e.g. an error), `formAction` (pass it to `<form action>`) and `pending` (true while waiting).
+- **Session and cookies:** after login, Supabase puts a signed token in a cookie. `getClaims()` checks the token's **signature**, so a faked cookie is rejected.
+- **Proxy (formerly "middleware"):** code that runs before every request. Pages aren't allowed to write cookies, but the proxy is, so it's the place to save a renewed token.
+- **Two layers of checks:** browser checks (`required`, `type="email"`, `minLength`) are only for convenience. The server checks everything again, because anyone can skip the browser.
+
+### Possible lecturer questions
+- *Where are passwords stored?* Not in our tables at all. Supabase Auth stores them hashed. We never see or store the real password.
+- *What happens when a login token expires?* `proxy.ts` asks Supabase to renew it on the next request and saves the new cookie, so the user stays logged in.
+- *Why does a wrong password give the same message as an unknown email?* So nobody can use the login form to find out which emails are registered.
+
+### Fix: the "Blocking Route" / `Date.now()` error
+- **What happened:** Next.js tries to **prepare pages in advance** (prerendering) so they open instantly. When you were logged in, Supabase checked whether your login token had expired by comparing it with the current time (`Date.now()`). A time worked out in advance would be wrong later, so Next.js stopped and reported it.
+- **Fix chosen:** `await connection()` at the start of `getCurrentProfile()` (`src/lib/auth/get-profile.ts`). It tells Next.js to wait for the real request before running the login check.
+- **Why this fix:** login and role information must be **fresh on every request**. If it were cached, someone whose role was removed, or who just logged out, might still be shown as logged in or keep their old role. The next part uses this same helper to protect pages, so it must never be stale.
+- **Trade-off:** the account area in the header can't be prepared in advance, so it appears a split second after the rest of the header. That's fine.
+- **Other fixes Next.js offered (not chosen):** `"use cache: private"` saves the result for a while, which risks a stale role. Moving the check into the browser (`"use client"`) breaks our "rules on the server" principle.

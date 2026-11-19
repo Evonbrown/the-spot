@@ -36,6 +36,9 @@ Rules:
 - In the branding part: switch the colour scheme to match the logo (red = main colour, orange = accent, white text on red), and put the logo at the top left of the header.
 - Current placeholder colours live in `src/app/globals.css` (`@theme`), so the switch should happen there.
 
+## Open decisions (settle before Build step 8)
+- Login with "email or student ID": the SRS allows both. For now login is EMAIL ONLY. Decide whether to add student ID login (and how customers without a student ID log in) before Build step 8.
+
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)
 - Application layer: server actions / route handlers in `lib/` and `app/api/`. All business rules live here, never only in the browser.
