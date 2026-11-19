@@ -1,69 +1,91 @@
-import Image from "next/image";
+/*
+ * src/app/page.tsx   ->   http://localhost:3000/
+ *
+ * WHAT: The Home page of The Spot: welcome message, opening hours,
+ *       pickup/delivery info, today's specials and a "View menu" button.
+ * LAYER: Presentation. Uses SAMPLE data for now (src/lib/sample-menu.ts).
+ */
 
-export default function Home() {
+import Link from "next/link";
+import MenuItemCard from "@/components/MenuItemCard";
+import {
+  DELIVERY_LOCATIONS,
+  OPENING_HOURS,
+  SAMPLE_MENU_ITEMS,
+} from "@/lib/sample-menu";
+
+/*
+ * HomePage
+ * Mobile-first: everything is stacked in one column on phones. On wider
+ * screens ("sm:" = 640px and up) the two info cards sit side by side.
+ */
+export default function HomePage() {
+  // FR-01: daily specials are highlighted. Only show ones that can be ordered.
+  const specials = SAMPLE_MENU_ITEMS.filter(
+    (item) => item.isDailySpecial && item.isAvailable
+  );
+
+  // Turns ["UWI Mona", "UTech", "UWI Hospital"] into "UWI Mona, UTech and UWI Hospital".
+  // We build it from DELIVERY_LOCATIONS (instead of typing the names) so that if the
+  // Manager changes the locations later, this sentence updates too.
+  const locationsText =
+    DELIVERY_LOCATIONS.slice(0, -1).join(", ") + " and " + DELIVERY_LOCATIONS.at(-1);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="mx-auto w-full max-w-5xl px-4 pb-12">
+      {/* Welcome section ("hero") */}
+      <section className="py-10 text-center">
+        <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+          Welcome to <span className="text-brand">The Spot</span>
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-stone-600">
+          Order ahead, skip the line. Hot meals ready for pickup, or delivered to{" "}
+          {locationsText}.
+        </p>
+        {/* The main action, big and easy to tap. Usability: Menu -> Cart -> Checkout in under 3 minutes */}
+        <Link
+          href="/menu"
+          className="mt-6 inline-flex min-h-12 items-center rounded-xl bg-brand px-8 text-lg font-bold text-white shadow hover:bg-brand-dark"
+        >
+          View menu
+        </Link>
+      </section>
+
+      {/* Info cards: hours, and pickup/delivery (FR-01) */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="rounded-xl bg-white p-5 shadow-sm">
+          <h2 className="font-bold">Opening hours</h2>
+          <p className="mt-1 text-2xl font-extrabold text-brand">{OPENING_HOURS}</p>
+          <p className="mt-1 text-sm text-stone-600">Pickup and delivery, every day we&apos;re open.</p>
+        </div>
+
+        <div className="rounded-xl bg-white p-5 shadow-sm">
+          <h2 className="font-bold">Pickup or delivery</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Pick up at the counter, or we deliver to:
           </p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {DELIVERY_LOCATIONS.map((location) => (
+              <li
+                key={location}
+                className="rounded-full bg-cream px-3 py-1 text-sm font-semibold text-brand-dark"
+              >
+                {location}
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      {/* Today's specials, reusing the same card as the menu page */}
+      <section className="mt-10">
+        <h2 className="mb-3 text-2xl font-bold">Today&apos;s specials</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {specials.map((item) => (
+            <MenuItemCard key={item.id} item={item} />
+          ))}
         </div>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }

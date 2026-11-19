@@ -65,3 +65,32 @@ One section per part we build. Read these before presentations.
 ### Possible lecturer questions
 - *What stops a customer from making themselves a manager?* Two things. The trigger ignores any role sent at sign-up, and the grants don't allow anyone to update the `role` column.
 - *Can a customer see another customer's phone number?* No. The RLS select policy only returns the row where `id` equals the logged-in user's id.
+
+---
+
+## Part 3: Design preview — Home and Menu pages (sample data)
+
+**Why:** to agree on the look before building more screens. It's also a head start on **FR-01**: menu with prices, descriptions, daily specials and allergens; unavailable items greyed out. It covers **SAF-2** too: allergens are shown on every item. The items are **made-up samples**. In Build step 2 they come from the Supabase `menu_items` table.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/sample-menu.ts` | stand-in for Data (temporary) | The `MenuItem` type, 8 sample items, opening hours, delivery locations, and `formatPrice()` (1200 → "J$1,200"). |
+| `src/components/SiteHeader.tsx` | Presentation | Orange top bar with "The Spot" and the Home/Menu links. Sticks to the top while scrolling. |
+| `src/components/MenuItemCard.tsx` | Presentation | One item card: badges, name, description, allergens, price, and the Add button (disabled and greyed out when unavailable). |
+| `src/app/page.tsx` | Presentation | Home (`/`): welcome, "View menu" button, hours, pickup/delivery locations, today's specials. |
+| `src/app/menu/page.tsx` | Presentation | Menu (`/menu`): category buttons that jump to Meals / Sides / Drinks sections. |
+| `src/app/layout.tsx` | Presentation | The frame around every page: tab title "The Spot" and the header. |
+| `src/app/globals.css` | Presentation | Brand colours (`brand` orange, `brand-dark`, `cream`, `ink`), defined once. |
+
+### Key concepts
+- **Component:** a reusable piece of a page, written as a function that returns HTML-like code (JSX). `MenuItemCard` is used on both the Home and Menu pages, so cards always look the same.
+- **Props:** information passed into a component, like arguments to a function: `<MenuItemCard item={...} />`.
+- **File-based routing:** in Next.js the folder decides the web address: `app/menu/page.tsx` → `/menu`. `layout.tsx` wraps every page.
+- **Mobile-first design:** write the phone layout first (one column). Then add bigger-screen changes with prefixes: `sm:` (640px and wider) and `lg:` (1024px and wider), e.g. `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`. Buttons are at least 44px tall (`min-h-11`) so they are easy to tap.
+- **Tailwind theme colours:** `--color-brand` in `globals.css` creates `bg-brand`, `text-brand`, etc. Changing one line recolours the whole site.
+- **TypeScript type:** `MenuItem` lists the fields every item must have. If one is missing or the wrong kind, the editor shows an error before the app even runs.
+
+### Possible lecturer questions
+- *Where is "unavailable items cannot be added" enforced?* For now only on screen: the Add button is `disabled`. When we build the cart and checkout, the **server** will also reject unavailable items, because CLAUDE.md says rules must never live only in the browser.
+- *Why no stock count?* The client said food never runs out, so we use `isAvailable` instead of inventory tracking.

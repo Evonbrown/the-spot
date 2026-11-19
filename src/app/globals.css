@@ -1,26 +1,31 @@
+/*
+ * src/app/globals.css
+ *
+ * WHAT: Styles that apply to the WHOLE site, and our brand colours.
+ * LAYER: Presentation.
+ *
+ * We use Tailwind CSS: instead of writing CSS by hand, we put small ready-made
+ * class names on elements (e.g. "p-4" = padding, "text-brand" = our orange text).
+ */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/*
+ * @theme: our brand colours, defined ONCE here.
+ * Tailwind turns each "--color-NAME" into classes like bg-NAME, text-NAME and
+ * border-NAME. To change the look of the whole site later, change it here only.
+ * (No dark mode: we agreed to keep one light look.)
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-brand: #ea580c; /* warm orange: buttons, highlights */
+  --color-brand-dark: #c2410c; /* darker orange: button when pressed/hovered */
+  --color-cream: #fff7ed; /* soft background behind the cards */
+  --color-ink: #1c1917; /* main text colour: very dark brown-grey, easy to read */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }

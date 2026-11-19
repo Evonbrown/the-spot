@@ -31,6 +31,11 @@ Rules:
 - Deploy on Vercel
 - Must work in current Chrome, Safari, Firefox and Edge on phones and computers. Staff and Manager screens are used on smartphones, so design mobile-first.
 
+## Branding (for a later "branding" part; do not change the design until then)
+- The Spot's real logo is `public/the-spot-logo.jpeg`: a red circle with "spot" in white script, "Sports Bar & Grill" underneath, and "THE" in a small orange box.
+- In the branding part: switch the colour scheme to match the logo (red = main colour, orange = accent, white text on red), and put the logo at the top left of the header.
+- Current placeholder colours live in `src/app/globals.css` (`@theme`), so the switch should happen there.
+
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)
 - Application layer: server actions / route handlers in `lib/` and `app/api/`. All business rules live here, never only in the browser.
