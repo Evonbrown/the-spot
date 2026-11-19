@@ -1,0 +1,109 @@
+# The Spot Food Sales Management System
+
+COMP2140 group project (Group ACE, UWI Mona). This web app must match our SRS (requirements) and SDS (design). When anything below conflicts with an idea you have, follow this file.
+
+## How to work with me (most important section)
+I am a student and I must understand everything we build, because my lecturer can ask me about any part of it. Teaching me matters more than speed.
+
+Build in parts:
+- Work on ONE small part at a time (for example "the login page" or "the cart", not "the whole ordering feature").
+- Before writing any code, explain in plain words: what this part does, why we need it (link it to the SRS feature, e.g. FR-05), and which files you will create or change. Then wait for me to say "go".
+- After finishing a part, STOP. Tell me how to test it in the browser and wait for me to confirm it works before starting the next part.
+
+Comment the code:
+- At the top of every file, write a short comment explaining what the file is for and where it fits in our three layers (Presentation, Application or Data).
+- Above every function, component and important block, write a comment explaining WHAT it does and WHY it is done this way.
+- Explain any rule from our SRS where it is enforced (e.g. "// FR-05 SR-5.3: status can only move forward").
+- Use plain, beginner-friendly English in comments. Avoid jargon, or explain it the first time you use it.
+
+Explain as we go:
+- After each part, give me a short summary: what you built, what each new file does, and one or two key ideas I should understand (e.g. what Row Level Security is).
+- Keep a file called LEARNING.md. After each part, add a section with: the part's name, the files involved, what they do, and the key concepts, so I can study it before presentations.
+- If I ask "why", explain it simply with an example from our system.
+
+Rules:
+- Do not rename classes, statuses or roles listed here. Ask before adding anything not listed.
+- Never build several parts at once, even if it would be faster.
+
+## Stack
+- Next.js (App Router, TypeScript) with Tailwind CSS
+- Supabase: Postgres database, Auth (email + password), Realtime (live status updates without refresh)
+- Deploy on Vercel
+- Must work in current Chrome, Safari, Firefox and Edge on phones and computers. Staff and Manager screens are used on smartphones, so design mobile-first.
+
+## Architecture (SDS 2.3: three-tier layered)
+- Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)
+- Application layer: server actions / route handlers in `lib/` and `app/api/`. All business rules live here, never only in the browser.
+- Data layer: Supabase tables, protected by Row Level Security (RLS)
+- External services: Lynk (Jamdex) QR payments (simulate for now), SMS/email notifications (simulate or log for now)
+
+## Roles (User subclasses)
+- customer: browse menu, cart, place and track orders
+- counter_staff (CounterStaff): live order queue, update statuses, assign deliveries, mark abandoned, confirm Order ID at handover
+- delivery_personnel (DeliveryPersonnel): see assigned deliveries, mark Being Delivered and Completed
+- manager (Manager): sales reports, daily closeout, edit menu items/prices/delivery locations
+- supervisor (Supervisor): verify Lynk payments, issue refunds (only role that can refund)
+Hierarchy: User -> Customer, Supervisor, Staff; Staff -> CounterStaff, DeliveryPersonnel, Manager.
+
+## Order statuses (use exactly these, in this order)
+PENDING -> IN_PROGRESS -> READY_FOR_PICKUP -> COMPLETED (pickup)
+PENDING -> IN_PROGRESS -> READY_FOR_PICKUP -> BEING_DELIVERED -> COMPLETED (delivery)
+End states also allowed: CANCELLED, ABANDONED.
+- Status may only move forward; reject skips and backwards moves with an error message.
+- A pickup order can be marked ABANDONED only 20 minutes or more after it became READY_FOR_PICKUP.
+
+## Features (SRS 2.3)
+FR-01 Online Pre-Order Placement & Scheduling
+- Show menu with prices, descriptions, daily specials and allergens. Unavailable items are greyed out and cannot be added.
+- Pickup or Delivery. Delivery locations only: UWI Mona, UTech, UWI Hospital.
+- Lead times: standard pickup immediate; pickup containing a made-to-order item (fries) at least 15 min; delivery at least 20 min. Use the larger rule when both apply.
+- Opening/delivery hours 11:00 a.m. - 7:00 p.m.
+- On submit: unique numeric Order ID, confirmation shown to customer, order appears in staff queue as PENDING within 3 seconds.
+
+FR-02 Pre-Order Customization & Submission
+- Customizations (sides, extra sauces) with extra cost; meal notes (dietary instructions).
+- Total = items + customizations + delivery fee (delivery only).
+- Payment method: Lynk (show QR code) or Cash. Lynk payments are verified by the Supervisor; the order is still submitted immediately.
+
+FR-03 Real-Time Order Management Queue (CounterStaff)
+- Vertical queue: Order ID, items, order time, pickup/delivery, status. New orders at the bottom as PENDING.
+- Update status; completed/cancelled/abandoned orders move to a "Past Orders" section.
+
+FR-04 Delivery Processing
+- Validate delivery location and hours. Staff assign delivery orders to an available DeliveryPersonnel.
+- Driver sees Order ID, customer phone, drop-off location; marks Being Delivered, then Completed after confirming the Order ID.
+
+FR-05 Real-Time Order Status Tracking & Alerts (Customer)
+- Customer sees Order ID and current status; updates appear within 5 seconds without refresh (Supabase Realtime).
+- Notify customer (SMS/email, simulated) when READY_FOR_PICKUP, CANCELLED or ABANDONED.
+- Customers can only see their own orders.
+
+FR-06 Sales Summary & Daily Closeout (Manager)
+- Revenue from paid orders only (exclude unpaid, cancelled, abandoned). Breakdown by payment type (Lynk vs Cash). Item volume report. Date range filter. Export CSV (PDF optional).
+- Closeout blocked while any order is open. Staff enter counted cash; system shows difference from expected cash. Manager approves -> day is locked (read-only). Only Manager can reopen, with a reason.
+- Counter staff may only see the current day's sales.
+
+## Non-functional requirements (SRS 3)
+- PR-1 menu loads within 3 s; PR-2 status update reaches customer within 5 s; PR-3 supports 100 concurrent customers at lunch.
+- SAF-1 Order ID confirmed before handover. SAF-2 show allergens on menu items.
+- Security: login required; role-based access (enforce with RLS + server checks); HTTPS; passwords handled by Supabase Auth (hashed); lock account 15 min after 5 failed logins; staff auto-logout after 30 min idle; never store card details.
+- Usability: a first-time customer can order in under 3 minutes (Menu -> Cart -> Checkout).
+- Maintainability: menu items, prices and delivery locations editable by Manager without code changes.
+- No inventory/stock tracking (client said food never runs out); use MenuItem.isAvailable instead.
+
+## Data model (match SDS class diagram names)
+User/profile (role), Customer, Staff, CounterStaff, DeliveryPersonnel, Manager, Supervisor,
+Cart, Order, OrderItem, OrderStatus, Notification, Menu, MenuItem, Customization,
+Payment, Refund, Delivery, SalesReport, DailyCloseout.
+Suggested tables: profiles, menu_items, customizations, orders, order_items, order_item_customizations,
+order_status_history, payments, refunds, deliveries, notifications, daily_closeouts.
+
+## Build order
+1. Project setup, Supabase connection, auth (sign up / log in) and roles
+2. Menu + cart (FR-01, FR-02)
+3. Checkout + order submission + payment method (FR-01, FR-02)
+4. Staff live queue + status rules (FR-03)
+5. Customer live tracking + notifications (FR-05)
+6. Delivery assignment + driver screen (FR-04)
+7. Manager reports + daily closeout; Supervisor refunds (FR-06, UC-07)
+8. Security hardening, seed data, testing against each SRS acceptance criterion, deploy to Vercel
