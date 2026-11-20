@@ -59,7 +59,15 @@ Rules:
 - Parts: 14 customizations table + sample seed; 15 options panel on Add (size, extras, meal note, quantity, live price); 16 cart (browser storage, cart page, header count). Meal notes: max 200 characters, checked on the server at checkout; saved on the order item (Build step 3).
 - Options panel: no size is pre-chosen unless the item has only one size; quantity per cart line is 1-10.
 - Cart: split into Part 16 (browser storage + Add buttons + header count) and Part 17 (cart page). The cart link is for visitors and customers only (no cart for staff). On the cart page a line can only change quantity or be removed (to change size/extras/note: remove and add again). The cart is kept when someone logs in, but CLEARED when they log out (shared campus computers), and cleared after an order is placed (Build step 3).
-- Cart page (Part 17): "−" is disabled at quantity 1 (remove only with the Remove button). Out-of-date prices/availability are NOT checked on the cart page; the server checks them at checkout (Build step 3) and tells the customer what changed. The Checkout button is shown disabled until Build step 3. Descriptions empty until the client says what comes with each meal.
+- Cart page (Part 17): "−" is disabled at quantity 1 (remove only with the Remove button). Out-of-date prices/availability are NOT checked on the cart page; the server checks them at checkout (Build step 3) and tells the customer what changed. The Checkout button is shown disabled until Build step 3.
+- Build step 3 parts: 18 delivery_locations table (sample fee); 19 order tables + create_order function + RLS; 20 checkout page; 21 placeOrder server action; 22 confirmation page.
+- Delivery locations: table `delivery_locations` (approved addition) with a fee PER location, `fee_confirmed` flag (false = show "(sample, not final)"), `is_active`, `sort_order`. Sample fee J$200 until the client gives the real one; the Manager edits it and ticks fee_confirmed (no code change).
+- Order writing: customers can only READ their own orders (no insert/update via RLS). The `placeOrder` server action does all checks and price maths, then calls DB function `create_order` (one transaction) that ONLY the server can call, using the Supabase secret key. The secret key is server-only: env var WITHOUT the NEXT_PUBLIC_ prefix, never imported by browser code, never committed.
+- Scheduling: "As soon as possible" or a time later TODAY in 15-minute steps (same day only), Jamaica time (UTC-5, no DST), within 11:00-19:00 and the FR-01 lead times.
+- Order IDs start at 1001. `client_request_id` (unique) prevents duplicate orders from double taps/retries.
+- Lynk QR: a clearly marked SAMPLE placeholder (no QR package).
+- Names: fulfilment PICKUP / DELIVERY; payment method LYNK / CASH; payment status UNPAID (PAID, REFUNDED added in Build step 7). Cash is allowed for pickup and delivery (paid to the driver).
+- IMPORTANT for Build step 7 (FR-06 counts PAID orders only): cash orders must be marked PAID when the cash is received (at the counter or by the driver), and Lynk orders when the Supervisor verifies them. Otherwise revenue reports would miss them. Descriptions empty until the client says what comes with each meal.
 
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)

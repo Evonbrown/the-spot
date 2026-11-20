@@ -5,6 +5,8 @@
  *       pickup/delivery info, today's specials and a "View menu" button.
  * LAYER: Presentation. The specials come from getMenuItems() (Application
  *        layer, src/lib/menu.ts), which reads the menu_items table (Data layer).
+ *        The delivery locations come from getDeliveryLocations()
+ *        (src/lib/delivery-locations.ts, table delivery_locations).
  */
 
 import Link from "next/link";
@@ -12,7 +14,8 @@ import MenuItemCard from "@/components/MenuItemCard";
 import { getCustomizations } from "@/lib/customizations";
 import { getMenuItems } from "@/lib/menu";
 import type { Customization, MenuItem } from "@/lib/menu-helpers";
-import { DELIVERY_LOCATIONS, OPENING_HOURS } from "@/lib/store-info";
+import { getDeliveryLocations } from "@/lib/delivery-locations";
+import { OPENING_HOURS, type DeliveryLocation } from "@/lib/store-info";
 
 /*
  * HomePage
@@ -45,13 +48,16 @@ export default async function HomePage() {
     (item) => item.isDailySpecial && item.isAvailable,
   );
 
-  // Turns ["UWI Mona", "UTech", "UWI Hospital"] into "UWI Mona, UTech and UWI Hospital".
-  // We build it from DELIVERY_LOCATIONS (instead of typing the names) so that if the
-  // Manager changes the locations later, this sentence updates too.
-  const locationsText =
-    DELIVERY_LOCATIONS.slice(0, -1).join(", ") +
-    " and " +
-    DELIVERY_LOCATIONS.at(-1);
+  // FR-01: the delivery locations, from the database (Part 18), so the Manager
+  // can change them without code changes. If they fail to load, the page just
+  // leaves them out (pickup info and the menu still work).
+  let locations: DeliveryLocation[] = [];
+  try {
+    locations = await getDeliveryLocations();
+  } catch {
+    locations = [];
+  }
+  const locationsText = joinWithAnd(locations.map((location) => location.name));
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 pb-12">
@@ -61,8 +67,8 @@ export default async function HomePage() {
           Welcome to <span className="text-brand">The Spot</span>
         </h1>
         <p className="mx-auto mt-3 max-w-md text-stone-600">
-          Order ahead, skip the line. Hot meals ready for pickup, or delivered
-          to {locationsText}.
+          Order ahead, skip the line. Hot meals ready for pickup
+          {locationsText ? `, or delivered to ${locationsText}.` : "."}
         </p>
         {/* The main action, big and easy to tap. Usability: Menu -> Cart -> Checkout in under 3 minutes */}
         <Link
@@ -88,15 +94,17 @@ export default async function HomePage() {
         <div className="rounded-xl bg-white p-5 shadow-sm">
           <h2 className="font-bold">Pickup or delivery</h2>
           <p className="mt-1 text-sm text-stone-600">
-            Pick up at the counter, or we deliver to:
+            {locations.length > 0
+              ? "Pick up at the counter, or we deliver to:"
+              : "Pick up at the counter."}
           </p>
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {DELIVERY_LOCATIONS.map((location) => (
+          <ul className="mt-2 flex flex-wrap gap-2 empty:hidden">
+            {locations.map((location) => (
               <li
-                key={location}
+                key={location.id}
                 className="rounded-full bg-cream px-3 py-1 text-sm font-semibold text-brand-dark"
               >
-                {location}
+                {location.name}
               </li>
             ))}
           </ul>
@@ -117,4 +125,15 @@ export default async function HomePage() {
       )}
     </main>
   );
+}
+
+/*
+ * joinWithAnd(["UWI Mona", "UTech", "UWI Hospital"]) -> "UWI Mona, UTech and UWI Hospital"
+ * joinWithAnd(["UTech"]) -> "UTech"      joinWithAnd([]) -> ""
+ * WHY? The Manager can now change how many locations there are, so the
+ * sentence must read correctly for 0, 1, 2 or more places.
+ */
+function joinWithAnd(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }

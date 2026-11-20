@@ -7,6 +7,7 @@ One section per part we build. Read these before presentations.
 ## ⚠️ Before deploying to Vercel (checklist)
 - [ ] **Turn email confirmation back ON:** Supabase dashboard → Authentication → Sign In / Providers → Email → "Confirm email". We switched it OFF during development (Part 2) so testing is faster. Supabase's free email service only sends a few emails per hour.
 - [ ] Delete the temporary `/test-connection` page (Part 1).
+- [ ] **Run every migration and seed in Supabase BEFORE the first build/deploy** (in the order listed in README.md). The build pre-builds pages using the database and stops if a table is missing (found in Part 18).
 - [ ] **Decide on student ID login** before Build step 8. The SRS says users log in with "email or student ID", but we built **email only** (Part 4). Decide whether to add student ID login, and how non-students would log in.
 
 ---
@@ -649,3 +650,41 @@ Step 2 was "Menu + cart (FR-01, FR-02)". It took Parts 6–17:
 - At checkout (Build step 3), the **server** will recalculate the price from the database before accepting the order, because browser data is never trusted.
 
 **Known issues carried forward:** category tap jumps instead of gliding (revisit in the branding part); header is narrower than the menu page on wide screens (branding part).
+
+---
+
+# Build step 3: Checkout and order submission (FR-01, FR-02)
+Parts: **18** delivery locations · **19** order tables + `create_order` · **20** checkout page · **21** `placeOrder` server action · **22** confirmation page.
+
+## Part 18: The `delivery_locations` table and the sample delivery fee
+The delivery locations moved from code (`store-info.ts`) into a database table, each with its **delivery fee**, so the Manager can change them without code changes (Maintainability). The real fee isn't known yet, so every location starts with a **sample fee of J$200**, clearly marked.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0005_delivery_locations.sql` | Data | Table, rules, `updated_at` trigger, grants, RLS (public read, manager-only edits). |
+| `supabase/seed/sample_delivery_locations.sql` | Data | UWI Mona, UTech, UWI Hospital, each J$200 with `fee_confirmed = false`. |
+| `src/lib/delivery-locations.ts` | Application | **New, server only.** `getDeliveryLocations()`: active locations, cached ~1 minute. |
+| `src/lib/store-info.ts` | Application | `DeliveryLocation` type and `formatDeliveryFee()` ("J$200 (sample, not final)"). The hard-coded list is gone. |
+| `src/app/page.tsx` | Presentation | Home page reads the locations from the database; `joinWithAnd()` builds the sentence for any number of places. |
+
+### The `delivery_locations` table
+| Column | Type | Why |
+|---|---|---|
+| `id` | auto-numbered | Orders will point to it (Part 19). |
+| `name` | text, unique | e.g. "UWI Mona". |
+| `delivery_fee` | numeric(10,2), ≥ 0 | Exact money; per location, so places can differ later. |
+| `fee_confirmed` | boolean | `false` → shown as "(sample, not final)". The Manager ticks it when the real fee is known. |
+| `is_active` | boolean | `false` → hidden from customers, but kept so old orders still point to a real place. |
+| `sort_order` | integer | Order in lists. |
+
+### Key concepts
+- **Marking sample data in the data itself:** `fee_confirmed` lets the *Manager* switch off the "(sample)" label, with no developer needed.
+- **"Deactivate, don't delete":** `is_active = false` hides a location without breaking old orders that refer to it.
+- **Graceful failure:** if the locations can't load, the Home page still works ("Pick up at the counter.") instead of crashing.
+- **Run the SQL before building or deploying:** `npm run build` pre-builds pages and calls the cached data functions. When `delivery_locations` didn't exist yet, the build **stopped** ("Error occurred prerendering page /"), even though the page itself handles a failed load. Order for every database change: **run the migration in Supabase first, then build/deploy** (this matters for Vercel too).
+- **Cached for display, fresh for money:** the Home page and checkout use the cached list; when an order is placed (Part 21) the server reads the fee **fresh** from the database.
+
+### Possible lecturer questions
+- *How does the Manager change the delivery fee?* Edit `delivery_fee` (Table Editor now, Manager screen in step 7) and set `fee_confirmed` to true. No code change.
+- *Why not delete a location you stop delivering to?* Old orders point to it. Setting `is_active = false` hides it from customers but keeps the history correct.
