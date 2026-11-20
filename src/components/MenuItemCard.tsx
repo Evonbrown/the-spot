@@ -10,7 +10,7 @@
  * items. Writing the card once means they always look the same.
  */
 
-import { formatPrice, type MenuItem } from "@/lib/menu";
+import { allergenText, formatPrice, isSinglePrice, type MenuItem } from "@/lib/menu";
 
 /*
  * MenuItemCard
@@ -22,7 +22,7 @@ export default function MenuItemCard({ item }: { item: MenuItem }) {
   const unavailable = !item.isAvailable;
 
   // A single-price item (e.g. Pepsi) has one option with no size.
-  const singlePrice = item.priceOptions.length === 1 && item.priceOptions[0].size === null;
+  const singlePrice = isSinglePrice(item);
 
   // The lowest price on offer. Math.min(...list) finds the smallest number.
   const fromPrice = Math.min(...item.priceOptions.map((option) => option.price));
@@ -57,11 +57,7 @@ export default function MenuItemCard({ item }: { item: MenuItem }) {
           unless the allergens have actually been confirmed as none). */}
       <p className="text-xs text-stone-700">
         <span className="font-semibold">Allergens: </span>
-        {item.allergens === null
-          ? "Not confirmed yet, please ask at the counter"
-          : item.allergens.length > 0
-            ? item.allergens.join(", ")
-            : "None"}
+        {allergenText(item)}
       </p>
 
       {/* Sizes (Small / Medium / Large) and their prices, only for sized items.

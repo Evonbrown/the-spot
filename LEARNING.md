@@ -407,3 +407,26 @@ The Menu page is quicker to use (Usability: order in under 3 minutes): tapping a
 - *Why is only the bar a client component?* Only it needs the browser (scroll position). Keeping the rest on the server sends less JavaScript, so the menu loads faster (PR-1).
 - *What happens if JavaScript doesn't load?* The links still jump to each section; you just don't get the highlight.
 - *Why doesn't the highlight lag when scrolling quickly?* We do the check at most once per screen redraw (`requestAnimationFrame`), which is cheap even on low-end phones.
+
+---
+
+## Part 12: Drinks as a compact list (Build step 2)
+The 40 drinks used to be 40 big cards, which made the menu very long. Now every **single-price item** (today: exactly the drinks) is a **slim row** (name, allergens, price, Add) inside one white box. Food (sized items) stays as cards. Usability: a customer can scan the drinks in seconds.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/components/MenuItemRow.tsx` | Presentation | **New.** One slim row for a single-price item. Greyed out when unavailable (FR-01); always shows allergens (SAF-2). |
+| `src/app/menu/page.tsx` | Presentation | Each section splits its items: sized → cards grid, single-price → row list (2 columns of rows on wide screens). |
+| `src/lib/menu.ts` | Application | New shared helpers `allergenText()` and `isSinglePrice()`. |
+| `src/components/MenuItemCard.tsx` | Presentation | Now uses the shared helpers (looks the same). |
+
+### Key concepts
+- **One rule, written once (`allergenText`)**: the card and the row both show allergens. Because both call the same function, they can never show different wording, which is important for a safety requirement (SAF-2).
+- **Rule-based display, no new column:** "single price → row" works because of our pricing decision (food is sized, drinks are single-price). We didn't need a `display_style` column in the database.
+- **Semantic HTML:** the rows are a `<ul>` list of `<li>` items, which screen readers announce as "list, 10 items", helpful for blind users.
+- **`min-w-0` + `flex-1`:** in a flex row, these let a long name wrap onto two lines instead of pushing the price and button off a small phone screen.
+
+### Possible lecturer questions
+- *How does the page decide card or row?* `isSinglePrice(item)`: one price and no sizes → row; otherwise card.
+- *Do the compact rows still meet SAF-2?* Yes, every row has an allergen line, using the same `allergenText()` as the cards.

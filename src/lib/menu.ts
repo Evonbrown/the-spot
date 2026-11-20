@@ -173,6 +173,30 @@ export function getCategories(items: MenuItem[]): string[] {
 }
 
 /*
+ * allergenText(item) -> the words shown after "Allergens:" (SAF-2).
+ *   null      -> "Not confirmed yet, please ask at the counter"
+ *   []        -> "None"            (confirmed: no allergens)
+ *   [Fish]    -> "Fish"
+ * WHY one shared function? Both the big card (food) and the compact row
+ * (drinks) show allergens. Writing the rule once means they can never
+ * disagree, which matters for a safety requirement.
+ */
+export function allergenText(item: MenuItem): string {
+  if (item.allergens === null) return "Not confirmed yet, please ask at the counter";
+  if (item.allergens.length === 0) return "None";
+  return item.allergens.join(", ");
+}
+
+/*
+ * isSinglePrice(item) -> true for items with ONE price and no sizes (e.g. Pepsi).
+ * Used by the card (to show "J$220" instead of size prices) and by the Menu page
+ * (decision: single-price items are shown as compact rows, not big cards).
+ */
+export function isSinglePrice(item: MenuItem): boolean {
+  return item.priceOptions.length === 1 && item.priceOptions[0].size === null;
+}
+
+/*
  * formatPrice(1200) -> "J$1,200"   formatPrice(99.5) -> "J$99.50"
  * One shared function, so every price on the site looks the same.
  * Whole-dollar prices show no cents; other prices always show 2 decimal places.
