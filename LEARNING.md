@@ -548,3 +548,45 @@ Tapping **Add** on a food item opens a panel to choose a **size**, tick **extras
 - *How is the price calculated?* `(size price + sum of ticked extras) × quantity`, in cents, by one shared function.
 - *Why can't I add without a size?* To avoid wrong orders, the button stays disabled until a size is picked (unless there's only one size).
 - *Where does the meal note go?* Into the cart line (Part 16), then saved on the order item at checkout (step 3), where the server checks the 200-character limit again.
+
+---
+
+## Part 16: The cart: storage, Add buttons and header count (Build step 2)
+Customers can now collect items: food goes in through the options panel, drinks with **one tap**, and the header shows **Cart (3)**. The cart is kept **in the browser** (works without logging in), survives reloads, updates across tabs, and is **emptied on Log out** (shared campus computers). The cart page itself comes in Part 17.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/cart.ts` | Application | **New.** `CartLine` type + pure rules: `addLine` (merge same choice, max 10), `sameChoice`, `cartCount`, `lineTotal`, `describeLine`, `parseCart` (safe reading). |
+| `src/lib/cart-store.ts` | Application | **New.** Saves the cart in `localStorage`, tells React about changes, listens for other tabs. |
+| `src/components/CartProvider.tsx` | Presentation | **New, client.** Shares the cart site-wide (React Context, `useCart()`), shows the "Added to cart" message. |
+| `src/components/QuickAddButton.tsx` | Presentation | **New, client.** One-tap Add for single-price items (drinks). |
+| `src/components/CartLink.tsx` | Presentation | **New, client.** "Cart" + count bubble in the header. |
+| `src/components/LogOutButton.tsx` | Presentation | **New, client.** Empties the cart, then runs the `logOut` Server Action. |
+| `AddToCartButton.tsx`, `ItemOptionsDialog.tsx` | Presentation | The panel's choice now goes into the real cart. |
+| `MenuItemRow.tsx`, `MenuItemCard.tsx` | Presentation | Use `QuickAddButton` for single-price items. |
+| `SiteHeader.tsx`, `layout.tsx` | Presentation | Cart link (visitors + customers only), Log out button; the whole site wrapped in `CartProvider`. |
+| `src/app/cart/page.tsx` | Presentation | **Temporary** placeholder until Part 17. |
+
+### Rules
+- **Same choice → same line:** same item + size + extras (any order) + note raises the quantity instead of adding a duplicate line. A different note = a new line.
+- **Max 10 per line:** extra adds stop at 10 and the message says so.
+- **Unavailable items** can't be added (FR-01).
+- **No cart for staff:** the Cart link only shows for visitors and customers.
+- **Log out empties the cart**; logging in keeps it.
+- **Prices in the cart are copies, not trusted:** anyone can edit browser storage, so the server re-checks every price and availability at checkout (step 3). `parseCart` only stops a damaged cart from crashing the page.
+
+### Key concepts
+- **localStorage:** a small storage box per website in the browser. It survives reloads, but stays on one browser/device. Every use is in `try/catch`, because some browsers refuse it (private mode, storage full).
+- **React Context (`CartProvider` + `useCart()`):** like a noticeboard. The provider pins the cart up once around the whole site; any component can read it without passing props through every level.
+- **`useSyncExternalStore`:** React's built-in way to read data that lives outside React (localStorage). We give it: how to subscribe, how to read in the browser, and what the server should use (an empty cart).
+- **Hydration:** the server can't see browser storage, so its HTML shows an empty cart; the browser then swaps in the real count. Starting from the same "empty" picture avoids a hydration mismatch error.
+- **Pure functions + new copies:** `addLine` never changes the old cart; it returns a new one. React only notices changes when it gets a new value.
+- **The `storage` event:** fires in *other* tabs when localStorage changes, so the count updates everywhere.
+- **Client button + Server Action:** `LogOutButton` empties the cart in the browser (`onClick`) *before* the form runs the server's `logOut`.
+
+### Possible lecturer questions
+- *Why keep the cart in the browser, not the database?* Decision for now: no login needed to browse and fill a cart, and no database writes until an order is placed. The server re-checks everything at checkout.
+- *Couldn't someone change the prices in their cart?* Yes, in their own browser, so the server never trusts cart prices; it recalculates from the database at checkout.
+- *What happens on a shared computer?* Log out empties the cart, so the next person starts fresh.
+- *Why does the count appear a split second after the page?* The server can't read browser storage; the browser fills in the real count right after loading (hydration).

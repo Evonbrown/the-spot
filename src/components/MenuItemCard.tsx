@@ -4,7 +4,8 @@
  * WHAT: Shows ONE menu item as a card: name, description, price (or its
  *       Small / Medium / Large prices), allergens, badges (Daily special /
  *       Made to order) and an "Add" button. For food (sized items), "Add"
- *       opens the options panel (AddToCartButton, Part 15).
+ *       opens the options panel (AddToCartButton); for a single-price item
+ *       it adds 1 straight to the cart (QuickAddButton).
  * LAYER: Presentation.
  *
  * WHY a component? The menu page and the home page ("Today's specials") both show
@@ -12,6 +13,7 @@
  */
 
 import AddToCartButton from "@/components/AddToCartButton";
+import QuickAddButton from "@/components/QuickAddButton";
 import {
   allergenText,
   formatPrice,
@@ -101,16 +103,8 @@ export default function MenuItemCard({
         </span>
 
         {singlePrice ? (
-          // A single-price item has nothing to choose. Part 16 (cart) will make
-          // this button add it straight to the cart; for now it does nothing.
-          // min-h-11 (44px) is the recommended minimum size for a tap target on phones.
-          <button
-            type="button"
-            disabled={unavailable}
-            className="min-h-11 rounded-lg bg-brand px-5 font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
-          >
-            {unavailable ? "Unavailable" : "Add"}
-          </button>
+          // A single-price item has nothing to choose: one tap adds 1 to the cart.
+          <QuickAddButton item={item} className="px-5" />
         ) : (
           // Food (sized items): opens the options panel (size, extras, note, quantity).
           <AddToCartButton item={item} customizations={customizations} />

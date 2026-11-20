@@ -36,11 +36,12 @@ import {
 
 /*
  * What the panel hands back when the customer taps "Add to cart".
- * Part 16 will put this into the cart. For now AddToCartButton just shows it.
+ * AddToCartButton turns this into a cart line (Part 16).
  */
 export type ItemChoice = {
   item: MenuItem;
   size: Size;
+  unitPrice: number; // the chosen size's price
   extras: Customization[];
   note: string;
   quantity: number;
@@ -116,7 +117,8 @@ export default function ItemOptionsDialog({ item, customizations, onAdd, onClose
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (size === null || linePrice === null) return; // button is disabled anyway
-    onAdd({ item, size, extras: chosenExtras, note: note.trim(), quantity, linePrice });
+    if (unitPrice === null) return;
+    onAdd({ item, size, unitPrice, extras: chosenExtras, note: note.trim(), quantity, linePrice });
     dialogRef.current?.close(); // fires "close" -> onClose
   }
 

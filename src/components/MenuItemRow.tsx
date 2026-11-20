@@ -2,8 +2,8 @@
  * src/components/MenuItemRow.tsx
  *
  * WHAT: Shows ONE single-price menu item (e.g. Pepsi J$220) as a slim row:
- *       name, allergens, price and an "Add" button. Many rows sit together in
- *       one white box (see menu/page.tsx).
+ *       name, allergens, price and a one-tap "Add" button (QuickAddButton).
+ *       Many rows sit together in one white box (see menu/page.tsx).
  *
  * LAYER: Presentation.
  *
@@ -17,6 +17,7 @@
  *   - SAF-2: allergens are always shown, even in the compact row.
  */
 
+import QuickAddButton from "@/components/QuickAddButton";
 import { allergenText, formatPrice, type MenuItem } from "@/lib/menu-helpers";
 
 /*
@@ -58,15 +59,8 @@ export default function MenuItemRow({ item }: { item: MenuItem }) {
 
       <span className="shrink-0 font-bold">{formatPrice(price)}</span>
 
-      {/* PREVIEW ONLY: does nothing yet (the cart is a later part).
-          min-h-11 = 44px, the recommended minimum tap size on phones. */}
-      <button
-        type="button"
-        disabled={unavailable}
-        className="min-h-11 shrink-0 rounded-lg bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
-      >
-        {unavailable ? "Unavailable" : "Add"}
-      </button>
+      {/* One tap adds 1 to the cart (Part 16). Greyed out when unavailable. */}
+      <QuickAddButton item={item} className="px-4 text-sm" />
     </li>
   );
 }

@@ -2,7 +2,8 @@
  * src/app/layout.tsx
  *
  * WHAT: The "frame" around every page: the <html> and <body> tags, the fonts,
- *       the browser tab title, and the SiteHeader shown at the top of every page.
+ *       the browser tab title, the SiteHeader shown at the top of every page,
+ *       and the CartProvider that shares the cart with every page.
  * LAYER: Presentation.
  *
  * Next.js puts each page inside this layout automatically. {children} below is
@@ -10,6 +11,7 @@
  */
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import CartProvider from "@/components/CartProvider";
 import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
 
@@ -44,8 +46,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <SiteHeader />
-        {children}
+        {/* CartProvider shares ONE cart with the header and every page (Part 16). */}
+        <CartProvider>
+          <SiteHeader />
+          {children}
+        </CartProvider>
       </body>
     </html>
   );

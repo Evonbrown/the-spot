@@ -2,8 +2,8 @@
  * src/components/SiteHeader.tsx
  *
  * WHAT: The top bar shown on every page: "The Spot" name (links to Home), a
- *       main link (Menu, or your own staff screen), and the account area
- *       (Log in, OR your name/role + Log out).
+ *       main link (Menu, or your own staff screen), the Cart link (visitors and
+ *       customers only), and the account area (Log in, OR your name/role + Log out).
  * LAYER: Presentation. It gets the logged-in user from the Application layer
  *        (getCurrentProfile in src/lib/auth/get-profile.ts).
  *
@@ -13,7 +13,8 @@
 
 import Link from "next/link";
 import { Suspense } from "react";
-import { logOut } from "@/lib/auth/actions";
+import CartLink from "@/components/CartLink";
+import LogOutButton from "@/components/LogOutButton";
 import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { ROLE_HOME, ROLE_LABELS, ROLE_SCREEN_LINK } from "@/lib/auth/roles";
 
@@ -58,10 +59,12 @@ function MenuLink() {
 
 /*
  * AccountArea (runs on the server)
- * Logged out -> "Menu" and a "Log in" button (the log-in page links to sign-up).
- * Customer   -> "Menu", their name + role, and "Log out".
+ * Logged out -> "Menu", "Cart" and a "Log in" button (the log-in page links to sign-up).
+ * Customer   -> "Menu", "Cart", their name + role, and "Log out".
  * Staff role -> a link to THEIR OWN screen (e.g. "Queue") instead of "Menu",
- *               their name + role, and "Log out".
+ *               their name + role, and "Log out". NO cart (decision: staff
+ *               don't order through the app).
+ * "Log out" also empties the cart (decision: shared campus computers).
  *
  * This link is only a shortcut. It is NOT the security: even if someone typed
  * another screen's address, requireRole() on that page would block them.
@@ -73,6 +76,7 @@ async function AccountArea() {
     return (
       <>
         <MenuLink />
+        <CartLink className={linkClass} />
         <Link
           href="/login"
           className="rounded-md bg-white px-3 py-2 text-brand hover:bg-orange-50"
@@ -92,18 +96,18 @@ async function AccountArea() {
           {screenLink}
         </Link>
       ) : (
-        <MenuLink />
+        // Customers: Menu + Cart. (Staff got their screen link above, and no cart.)
+        <>
+          <MenuLink />
+          <CartLink className={linkClass} />
+        </>
       )}
       {/* "truncate" + max width: long names get "…" instead of breaking the header on phones */}
       <div className="max-w-[6.5rem] px-1 text-right leading-tight">
         <p className="truncate">{profile.full_name || profile.email}</p>
         <p className="truncate text-xs font-normal opacity-90">{ROLE_LABELS[profile.role]}</p>
       </div>
-      <form action={logOut}>
-        <button type="submit" className={linkClass}>
-          Log out
-        </button>
-      </form>
+      <LogOutButton className={linkClass} />
     </>
   );
 }
