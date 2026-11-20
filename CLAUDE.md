@@ -46,6 +46,14 @@ Rules:
 - Strict role access: each role opens only its own screen (e.g. a manager cannot open /staff).
 - Phone number is required at sign-up; minimum password length is 8.
 - Login is email only for now (see "Open decisions" for student ID login).
+- Sizes (Option C): MenuItem has `price` (single-price items, e.g. drinks) OR `price_small` / `price_medium` / `price_large` (food). An empty size = not offered. No new class/table. Drinks sold in two sizes stay as separate single-price items (e.g. "Sprite (Small)").
+- Real menu (the-spot-real-menu.md), until the client answers:
+  - Items with no price (Snapper Fish, Boom, Supligen, True Juice) are left out.
+  - Curry Goat Large = 1500 (unconfirmed: 1500 or 1600).
+  - Allergens unknown: `allergens` NULL = not confirmed, shown as "ask at the counter" (SAF-2). Never show "None listed" for unconfirmed items.
+  - Alcohol items are added but marked unavailable until the client decides on online alcohol sales.
+  - Oxtail (Thursdays) and Stew Peas (Wednesdays) are daily specials; the Manager switches is_available on for their day, so they show in "Today's specials" only then. Day noted in the description.
+  - Categories: "Food" and "Drinks". Only Chicken & Fries is made-to-order. Descriptions empty until the client says what comes with each meal.
 
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)

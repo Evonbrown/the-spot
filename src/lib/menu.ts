@@ -17,6 +17,23 @@ import { cacheLife, cacheTag } from "next/cache";
 import { createPublicClient } from "@/lib/supabase/public";
 
 /*
+ * The three sizes on The Spot's menu board, in display order.
+ */
+export type Size = "Small" | "Medium" | "Large";
+
+/*
+ * PriceOption: one price a customer can choose for an item.
+ *   Sized item (Fry Chicken):  { size: "Small", price: 750 }, { size: "Medium", ... }
+ *   Single-price item (Pepsi): { size: null, price: 220 }   (null = no size)
+ * This is NOT a new database class: it's just a handy shape for the pages,
+ * built from MenuItem's price columns (decision "Option C").
+ */
+export type PriceOption = {
+  size: Size | null;
+  price: number; // J$. Stored EXACTLY in the database as numeric(10,2)
+};
+
+/*
  * MenuItem: what ONE menu item looks like in our code (SDS class: MenuItem).
  * The database uses snake_case names (is_available); TypeScript code usually
  * uses camelCase (isAvailable). getMenuItems() converts between them, so the
@@ -26,9 +43,13 @@ export type MenuItem = {
   id: number;
   name: string;
   description: string;
-  price: number; // J$. Stored EXACTLY in the database as numeric(10,2)
-  category: string; // plain text (decision), e.g. "Meals"
-  allergens: string[]; // SAF-2: shown on every item. Empty list = no listed allergens
+  // Always at least 1 option. Only the sizes actually offered are included,
+  // in Small -> Medium -> Large order (Fish: just [Large]).
+  priceOptions: PriceOption[];
+  category: string; // plain text (decision), e.g. "Food"
+  // SAF-2: null = NOT CONFIRMED yet ("ask at the counter").
+  //        []   = confirmed: no allergens.
+  allergens: string[] | null;
   isAvailable: boolean; // FR-01: false = greyed out, cannot be added (instead of stock tracking)
   isDailySpecial: boolean; // FR-01: daily specials are highlighted
   isMadeToOrder: boolean; // FR-01: e.g. fries. Pickup with one needs at least 15 min
@@ -37,18 +58,49 @@ export type MenuItem = {
 /*
  * MenuItemRow: what one row looks like when it comes back FROM the database.
  * Used only inside this file, for the conversion below.
+ * Prices may be null (a size not offered, or "price" on a sized item).
  */
 type MenuItemRow = {
   id: number;
   name: string;
   description: string;
-  price: number | string;
+  price: number | string | null;
+  price_small: number | string | null;
+  price_medium: number | string | null;
+  price_large: number | string | null;
   category: string;
-  allergens: string[];
+  allergens: string[] | null;
   is_available: boolean;
   is_daily_special: boolean;
   is_made_to_order: boolean;
 };
+
+/*
+ * toPriceOptions(row)
+ * Turns the 4 price columns of one row into a simple list.
+ *   price 220, sizes empty           -> [{ size: null, price: 220 }]
+ *   price empty, medium 1100, large 1350
+ *                                    -> [{ Medium, 1100 }, { Large, 1350 }]
+ * The database rule menu_items_one_pricing_style (0003) guarantees a row is
+ * one style or the other and never has no price at all.
+ * Number(...) makes sure each price is a number even if it arrives as text
+ * ("1200.00"), which can happen with exact numeric columns.
+ */
+function toPriceOptions(row: MenuItemRow): PriceOption[] {
+  if (row.price !== null) {
+    return [{ size: null, price: Number(row.price) }];
+  }
+
+  const sizes: [Size, number | string | null][] = [
+    ["Small", row.price_small],
+    ["Medium", row.price_medium],
+    ["Large", row.price_large],
+  ];
+
+  return sizes
+    .filter(([, price]) => price !== null) // keep only the sizes offered
+    .map(([size, price]) => ({ size, price: Number(price) }));
+}
 
 /*
  * getMenuItems()
@@ -82,7 +134,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
   const { data, error } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, category, allergens, is_available, is_daily_special, is_made_to_order"
+      "id, name, description, price, price_small, price_medium, price_large, category, allergens, is_available, is_daily_special, is_made_to_order"
     )
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
@@ -98,9 +150,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
     id: row.id,
     name: row.name,
     description: row.description,
-    // Number(...) makes sure price is a number even if it arrives as text
-    // ("1200.00"), which can happen with exact numeric columns.
-    price: Number(row.price),
+    priceOptions: toPriceOptions(row),
     category: row.category,
     allergens: row.allergens,
     isAvailable: row.is_available,

@@ -279,3 +279,37 @@ The Menu page and the Home page's "Today's specials" now show the rows in `menu_
 - *If the Manager marks an item unavailable, could a customer still order it from an old cached page?* They might still see it for up to a minute, but checkout re-checks availability on the server (step 3), so the order would be refused.
 - *Why is the menu readable while logged out?* Our decision: anyone can browse. RLS allows SELECT for `anon`, and we use the cookie-free connection.
 - *How does a new category appear?* `getCategories()` builds the list from the items, so a new category text creates a new section automatically.
+
+---
+
+## Part 8: Small / Medium / Large sizes (Build step 2)
+The real menu board sells food in up to 3 sizes with different prices (Fry Chicken 750 / 950 / 1200), and some dishes only come in some sizes (Fish: Large only). This part teaches the database and the menu cards about sizes. It also makes "allergens not confirmed yet" possible, because we don't know the real dishes' allergens.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0003_menu_item_sizes.sql` | Data | Adds `price_small`, `price_medium`, `price_large`; makes `price` optional; adds the "one pricing style" rule; lets `allergens` be NULL (= not confirmed). |
+| `src/lib/menu.ts` | Application | New `Size` and `PriceOption` types. `toPriceOptions()` turns the 4 price columns into a list. `MenuItem.price` became `priceOptions`. |
+| `src/components/MenuItemCard.tsx` | Presentation | Shows the offered sizes with prices and "From J$…". Shows "Not confirmed yet, please ask at the counter" for unconfirmed allergens. |
+
+### Why "Option C" (size price columns on MenuItem)
+| Option | Problem |
+|---|---|
+| A. One row per size | Description and **allergens** copied 3 times → they can disagree (SAF-2 safety risk). |
+| B. New `menu_item_sizes` table | Adds a class that isn't in our SDS. |
+| **C. Columns on MenuItem** ✅ | Only limit: a 4th size would need a database change. The board has 3. |
+
+### Rules the database enforces
+- **One pricing style per item** (`menu_items_one_pricing_style`): *either* `price` is filled and all sizes are empty (drinks), *or* `price` is empty and at least one size is filled (food). No item can have no price, or two kinds of price.
+- **No negative prices** on all 4 price columns.
+- **Allergens:** `NULL` = not confirmed, `{}` = confirmed none, `{Fish}` = confirmed list. New items start as NULL (not confirmed), because saying "ask" is safer than wrongly saying "none".
+
+### Key concepts
+- **`ALTER TABLE`:** changes an existing table (add columns, add rules) without deleting its rows. That's why the 8 sample items kept working.
+- **NULL means "no value":** it is different from 0 or an empty list. We use that difference on purpose: an empty size price = "not offered"; NULL allergens = "not known yet", while `{}` = "known: none".
+- **Shape for the pages vs. shape in the database:** the database has 4 price columns (simple to store and check); the pages get one list, `priceOptions` (simple to display). `menu.ts` converts once, so pages never deal with the columns.
+
+### Possible lecturer questions
+- *Why not a separate table for sizes?* It would add a class not in our SDS. Columns keep one row per dish, so allergens are stored once.
+- *What stops an item from having no price?* The `menu_items_one_pricing_style` CHECK constraint, enforced by the database even for a manager.
+- *Why show "ask at the counter" instead of "None"?* SAF-2. We don't know the real allergens yet, and "None" could hurt someone with an allergy.
