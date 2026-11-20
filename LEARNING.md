@@ -348,3 +348,24 @@ The 8 made-up items are replaced by The Spot's real menu, copied from photos of 
 - *Why are some board items missing?* They have no price on the board, and the database refuses an item without a price. We're waiting for the client.
 - *Why does every item say "ask at the counter" for allergens?* SAF-2: no allergens are confirmed yet, and claiming "None" could be dangerous.
 - *What happens if the seed has a mistake halfway through?* It's a transaction, so everything is cancelled and the table is unchanged.
+
+---
+
+## Part 10: More menu categories (Build step 2)
+Two big sections ("Food", "Drinks") became **8 smaller ones**, so customers find things faster (Usability: order in under 3 minutes): **Chicken, Pork & Beef, Goat & Fish, Mixes, Sodas, Water & Juice, Energy & Sports, Alcohol**.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/seed/real_menu_items.sql` | Data | Same 56 items and prices; new `category` values and renumbered `sort_order`. |
+| `src/app/menu/page.tsx` | Presentation | `toId()` now makes safe link names: "Pork & Beef" → `#pork-and-beef`. |
+
+### Key concepts
+- **Data-driven sections:** no code lists the category names. The page builds its buttons and sections from the `category` text, so changing data was enough. That's the Maintainability requirement in action: the Manager can rename or add a category without a developer.
+- **sort_order blocks:** categories appear in the order their first item appears, so each category gets its own block (Chicken 110–140, Pork & Beef 210–260, …, Alcohol 1510–1610). Items in a category stay together, and the gaps leave room for new items.
+- **Why merge Goat & Fish?** Alone, each would be a 1-item section: an extra button that slows people down.
+- **Safe link names ("slugs"):** a web address fragment like `#pork-&-beef` can misbehave, because `&` has a special meaning in addresses. We turn names into simple lower-case words joined by `-`.
+
+### Possible lecturer questions
+- *How did you add categories without changing the code?* The page groups items by the `category` column, so new values automatically become new sections.
+- *What decides the order of the sections?* `sort_order`: each category has its own block of numbers.

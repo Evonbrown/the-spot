@@ -64,8 +64,15 @@ export default async function MenuPage() {
 function MenuSections({ items }: { items: MenuItem[] }) {
   const categories = getCategories(items);
 
-  // Turns "Hot Meals" into "hot-meals", a safe value for a link like "#hot-meals".
-  const toId = (category: string) => category.toLowerCase().replace(/\s+/g, "-");
+  // Turns a category into a safe value for a link, e.g. "Pork & Beef" -> "pork-and-beef"
+  // (used as "#pork-and-beef"). Steps: lower case, "&" becomes "and", then every
+  // run of characters that isn't a letter or digit becomes one "-".
+  const toId = (category: string) =>
+    category
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
 
   return (
     <>

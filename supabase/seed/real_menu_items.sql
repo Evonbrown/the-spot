@@ -3,7 +3,8 @@
 --
 -- WHAT: Replaces whatever is in menu_items with The Spot's REAL menu, copied
 --       from photos of the menu boards (see the-spot-real-menu.md, Nov 2026).
---       16 food items (sized) + 40 drinks (single price) = 56 items.
+--       16 food items (sized) + 40 drinks (single price) = 56 items,
+--       in 8 categories.
 --
 -- LAYER: Data layer (starting content, not structure).
 --
@@ -19,9 +20,18 @@
 --     switches is_available on for their day (Thursday / Wednesday).
 --   - Only Chicken & Fries is made-to-order (15 min pickup lead time).
 --   - Where the board shows a changed price, the NEW price is used.
---   - sort_order follows the board, in steps of 10 (food 10, 20, ...; drinks
---     1010, 1020, ...). The gaps let the Manager slot a new item in between
---     later without renumbering everything.
+--
+-- CATEGORIES (Usability: order in under 3 minutes). Smaller groups help
+--   customers find things fast. The menu page builds its sections from the
+--   "category" text, in sort_order, so no code lists these names.
+--
+-- SORT ORDER: each category has its own block of numbers, in steps of 10:
+--     Chicken 110-140, Pork & Beef 210-260, Goat & Fish 310-320, Mixes 410-440,
+--     Sodas 1110-1200, Water & Juice 1210-1350, Energy & Sports 1410-1440,
+--     Alcohol 1510-1610.
+--   Why blocks? The page shows categories in the order their first item
+--   appears, so a category's items must sit next to each other. The gaps let
+--   the Manager slot a new item in (e.g. 115) without renumbering everything.
 --
 -- HOW TO RUN: AFTER migrations 0002 and 0003. SQL Editor -> New query ->
 --      paste this whole file -> Run. Safe to run again: it empties the table
@@ -47,76 +57,89 @@ insert into public.menu_items
   (name, description, category, price_small, price_medium, price_large,
    allergens, is_available, is_daily_special, is_made_to_order, sort_order)
 values
-  ('Fry Chicken',        '', 'Food',  750.00,  950.00, 1200.00, null, true,  false, false,  10),
-  ('Bar-B-Fry Chicken',  '', 'Food',  750.00,  950.00, 1200.00, null, true,  false, false,  20),
-  ('Brown Stew Chicken', '', 'Food',  750.00,  950.00, 1200.00, null, true,  false, false,  30),
-  ('Stew Beef',          '', 'Food',    null, 1100.00, 1350.00, null, true,  false, false,  40),
-  ('Stew Pork',          '', 'Food',    null, 1100.00, 1350.00, null, true,  false, false,  50),
-  -- Medium was changed on the board from 1200 to 1250.
-  -- Large is UNCONFIRMED: the board is hard to read (1500 or 1600). Check with the client.
-  ('Curry Goat',         '', 'Food',    null, 1250.00, 1500.00, null, true,  false, false,  60),
-  ('Cow Foot',           '', 'Food',    null, 1000.00, 1250.00, null, true,  false, false,  70),
-  ('Fish',               '', 'Food',    null,    null, 1500.00, null, true,  false, false,  80),
-  -- Daily specials: unavailable until the Manager switches them on for their day.
-  ('Oxtail',    'Thursdays only',  'Food', null,    null, 1800.00, null, false, true, false,  90),
-  ('Stew Peas', 'Wednesdays only', 'Food', null, 1100.00, 1300.00, null, false, true, false, 100),
+  -- Chicken -----------------------------------------------------------------
+  ('Fry Chicken',        '', 'Chicken',      750.00,  950.00, 1200.00, null, true,  false, false, 110),
+  ('Bar-B-Fry Chicken',  '', 'Chicken',      750.00,  950.00, 1200.00, null, true,  false, false, 120),
+  ('Brown Stew Chicken', '', 'Chicken',      750.00,  950.00, 1200.00, null, true,  false, false, 130),
   -- Made-to-order (fries): a pickup order with it needs at least 15 min (FR-01).
-  ('Chicken & Fries',    '', 'Food',    null, 1150.00, 1400.00, null, true,  false, true,  110),
-  ('Beef Mix Chicken',   '', 'Food',    null,    null, 1550.00, null, true,  false, false, 120),
-  ('Pork Mix Chicken',   '', 'Food',    null,    null, 1550.00, null, true,  false, false, 130),
-  ('Goat Mix Chicken',   '', 'Food',    null,    null, 1650.00, null, true,  false, false, 140),
-  ('Fish Mix Chicken',   '', 'Food',    null,    null, 1650.00, null, true,  false, false, 150),
-  ('Barbeque Pig Tail',  '', 'Food',    null, 1200.00, 1400.00, null, true,  false, false, 160);
+  ('Chicken & Fries',    '', 'Chicken',        null, 1150.00, 1400.00, null, true,  false, true,  140),
+
+  -- Pork & Beef -------------------------------------------------------------
+  ('Stew Beef',          '', 'Pork & Beef',    null, 1100.00, 1350.00, null, true,  false, false, 210),
+  ('Stew Pork',          '', 'Pork & Beef',    null, 1100.00, 1350.00, null, true,  false, false, 220),
+  ('Cow Foot',           '', 'Pork & Beef',    null, 1000.00, 1250.00, null, true,  false, false, 230),
+  -- Daily specials: unavailable until the Manager switches them on for their day.
+  ('Oxtail',    'Thursdays only',  'Pork & Beef', null,    null, 1800.00, null, false, true, false, 240),
+  ('Stew Peas', 'Wednesdays only', 'Pork & Beef', null, 1100.00, 1300.00, null, false, true, false, 250),
+  ('Barbeque Pig Tail',  '', 'Pork & Beef',    null, 1200.00, 1400.00, null, true,  false, false, 260),
+
+  -- Goat & Fish (merged: on their own each would be a 1-item section) --------
+  -- Curry Goat: Medium was changed on the board from 1200 to 1250.
+  -- Large is UNCONFIRMED: the board is hard to read (1500 or 1600). Check with the client.
+  ('Curry Goat',         '', 'Goat & Fish',    null, 1250.00, 1500.00, null, true,  false, false, 310),
+  ('Fish',               '', 'Goat & Fish',    null,    null, 1500.00, null, true,  false, false, 320),
+
+  -- Mixes -------------------------------------------------------------------
+  ('Beef Mix Chicken',   '', 'Mixes',          null,    null, 1550.00, null, true,  false, false, 410),
+  ('Pork Mix Chicken',   '', 'Mixes',          null,    null, 1550.00, null, true,  false, false, 420),
+  ('Goat Mix Chicken',   '', 'Mixes',          null,    null, 1650.00, null, true,  false, false, 430),
+  ('Fish Mix Chicken',   '', 'Mixes',          null,    null, 1650.00, null, true,  false, false, 440);
 
 
 -- -----------------------------------------------------------------------------
 -- DRINKS: single price. The size columns stay NULL.
 -- Drinks sold in two sizes are separate items, exactly as the board lists them.
--- is_available = false marks the alcohol items (not sold online for now).
 -- -----------------------------------------------------------------------------
 insert into public.menu_items
   (name, description, category, price,
    allergens, is_available, is_daily_special, is_made_to_order, sort_order)
 values
-  ('Pepsi',                 '', 'Drinks',  220.00, null, true,  false, false, 1010),
-  ('D&G Soda',              '', 'Drinks',  220.00, null, true,  false, false, 1020),
-  ('Ting',                  '', 'Drinks',  220.00, null, true,  false, false, 1030),
-  ('Ginger Beer',           '', 'Drinks',  220.00, null, true,  false, false, 1040),
-  ('Tropics',               '', 'Drinks',  220.00, null, true,  false, false, 1050),
-  ('Bigga Soda',            '', 'Drinks',  200.00, null, true,  false, false, 1060),
-  ('Schweppes (Large)',     '', 'Drinks',  220.00, null, true,  false, false, 1070),
-  ('Minute Maid',           '', 'Drinks',  220.00, null, true,  false, false, 1080),
-  ('Sparkling Water',       '', 'Drinks',  220.00, null, true,  false, false, 1090),
-  ('Squeeze (Large)',       '', 'Drinks',  180.00, null, true,  false, false, 1100),
-  ('Squeeze (Small)',       '', 'Drinks',  130.00, null, true,  false, false, 1110),
-  ('Cran Wata',             '', 'Drinks',  170.00, null, true,  false, false, 1120),
-  ('Sprite (Large)',        '', 'Drinks',  220.00, null, true,  false, false, 1130),
-  ('Sprite (Small)',        '', 'Drinks',  130.00, null, true,  false, false, 1140),
-  ('Water (1.5L)',          '', 'Drinks',  200.00, null, true,  false, false, 1150),
-  ('Water (600ml)',         '', 'Drinks',  130.00, null, true,  false, false, 1160),
-  ('Ocean Splash (Small)',  '', 'Drinks',  170.00, null, true,  false, false, 1170),
-  ('Ocean Splash (Large)',  '', 'Drinks',  320.00, null, true,  false, false, 1180),
-  ('Arizona',               '', 'Drinks',  450.00, null, true,  false, false, 1190), -- changed from 400
-  ('I Kool Water (500ml)',  '', 'Drinks',  100.00, null, true,  false, false, 1200),
-  ('I Kool Water (1.5L)',   '', 'Drinks',  200.00, null, true,  false, false, 1210),
-  ('Zesti',                 '', 'Drinks',  300.00, null, true,  false, false, 1220),
-  ('Dragon Stout',          '', 'Drinks',  400.00, null, false, false, false, 1230), -- alcohol
-  ('Heineken',              '', 'Drinks',  400.00, null, false, false, false, 1240), -- alcohol
-  ('Sorrel Beer',           '', 'Drinks',  400.00, null, false, false, false, 1250), -- alcohol
-  ('Red Stripe Beer',       '', 'Drinks',  400.00, null, false, false, false, 1260), -- alcohol
-  ('Guinness',              '', 'Drinks',  400.00, null, false, false, false, 1270), -- alcohol
-  ('Malta',                 '', 'Drinks',  350.00, null, true,  false, false, 1280),
-  ('Smirnoff Ice',          '', 'Drinks',  400.00, null, false, false, false, 1290), -- alcohol
-  ('Red Bull',              '', 'Drinks',  500.00, null, true,  false, false, 1300),
-  ('Power',                 '', 'Drinks',  220.00, null, true,  false, false, 1310),
-  ('Magnum',                '', 'Drinks',  500.00, null, false, false, false, 1320), -- alcohol
-  ('Flask Rum',             '', 'Drinks', 1500.00, null, false, false, false, 1330), -- alcohol
-  ('Flask Appleton',        '', 'Drinks', 1500.00, null, false, false, false, 1340), -- alcohol
-  ('Flask Campari',         '', 'Drinks', 1500.00, null, false, false, false, 1350), -- alcohol
-  ('Tropical Rhythm',       '', 'Drinks',  420.00, null, true,  false, false, 1360),
-  ('Gatorade',              '', 'Drinks',  350.00, null, true,  false, false, 1370), -- changed from 300
-  ('Monster',               '', 'Drinks',  350.00, null, true,  false, false, 1380), -- changed from 250
-  ('Red Label Wine',        '', 'Drinks',  370.00, null, false, false, false, 1390), -- alcohol
-  ('Cran Juice',            '', 'Drinks',  400.00, null, true,  false, false, 1400);
+  -- Sodas -------------------------------------------------------------------
+  ('Pepsi',                 '', 'Sodas',            220.00, null, true,  false, false, 1110),
+  ('D&G Soda',              '', 'Sodas',            220.00, null, true,  false, false, 1120),
+  ('Ting',                  '', 'Sodas',            220.00, null, true,  false, false, 1130),
+  ('Ginger Beer',           '', 'Sodas',            220.00, null, true,  false, false, 1140),
+  ('Bigga Soda',            '', 'Sodas',            200.00, null, true,  false, false, 1150),
+  ('Schweppes (Large)',     '', 'Sodas',            220.00, null, true,  false, false, 1160),
+  ('Sprite (Large)',        '', 'Sodas',            220.00, null, true,  false, false, 1170),
+  ('Sprite (Small)',        '', 'Sodas',            130.00, null, true,  false, false, 1180),
+  ('Malta',                 '', 'Sodas',            350.00, null, true,  false, false, 1190),
+  ('Zesti',                 '', 'Sodas',            300.00, null, true,  false, false, 1200),
+
+  -- Water & Juice -----------------------------------------------------------
+  ('Water (1.5L)',          '', 'Water & Juice',    200.00, null, true,  false, false, 1210),
+  ('Water (600ml)',         '', 'Water & Juice',    130.00, null, true,  false, false, 1220),
+  ('I Kool Water (1.5L)',   '', 'Water & Juice',    200.00, null, true,  false, false, 1230),
+  ('I Kool Water (500ml)',  '', 'Water & Juice',    100.00, null, true,  false, false, 1240),
+  ('Sparkling Water',       '', 'Water & Juice',    220.00, null, true,  false, false, 1250),
+  ('Minute Maid',           '', 'Water & Juice',    220.00, null, true,  false, false, 1260),
+  ('Squeeze (Large)',       '', 'Water & Juice',    180.00, null, true,  false, false, 1270),
+  ('Squeeze (Small)',       '', 'Water & Juice',    130.00, null, true,  false, false, 1280),
+  ('Ocean Splash (Large)',  '', 'Water & Juice',    320.00, null, true,  false, false, 1290),
+  ('Ocean Splash (Small)',  '', 'Water & Juice',    170.00, null, true,  false, false, 1300),
+  ('Arizona',               '', 'Water & Juice',    450.00, null, true,  false, false, 1310), -- changed from 400
+  ('Cran Juice',            '', 'Water & Juice',    400.00, null, true,  false, false, 1320),
+  ('Cran Wata',             '', 'Water & Juice',    170.00, null, true,  false, false, 1330),
+  ('Tropical Rhythm',       '', 'Water & Juice',    420.00, null, true,  false, false, 1340),
+  ('Tropics',               '', 'Water & Juice',    220.00, null, true,  false, false, 1350),
+
+  -- Energy & Sports ---------------------------------------------------------
+  ('Red Bull',              '', 'Energy & Sports',  500.00, null, true,  false, false, 1410),
+  ('Monster',               '', 'Energy & Sports',  350.00, null, true,  false, false, 1420), -- changed from 250
+  ('Gatorade',              '', 'Energy & Sports',  350.00, null, true,  false, false, 1430), -- changed from 300
+  ('Power',                 '', 'Energy & Sports',  220.00, null, true,  false, false, 1440),
+
+  -- Alcohol: listed but unavailable (online alcohol sales not decided) -------
+  ('Red Stripe Beer',       '', 'Alcohol',          400.00, null, false, false, false, 1510),
+  ('Heineken',              '', 'Alcohol',          400.00, null, false, false, false, 1520),
+  ('Guinness',              '', 'Alcohol',          400.00, null, false, false, false, 1530),
+  ('Dragon Stout',          '', 'Alcohol',          400.00, null, false, false, false, 1540),
+  ('Sorrel Beer',           '', 'Alcohol',          400.00, null, false, false, false, 1550),
+  ('Smirnoff Ice',          '', 'Alcohol',          400.00, null, false, false, false, 1560),
+  ('Magnum',                '', 'Alcohol',          500.00, null, false, false, false, 1570),
+  ('Red Label Wine',        '', 'Alcohol',          370.00, null, false, false, false, 1580),
+  ('Flask Rum',             '', 'Alcohol',         1500.00, null, false, false, false, 1590),
+  ('Flask Appleton',        '', 'Alcohol',         1500.00, null, false, false, false, 1600),
+  ('Flask Campari',         '', 'Alcohol',         1500.00, null, false, false, false, 1610);
 
 commit;

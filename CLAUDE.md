@@ -53,7 +53,8 @@ Rules:
   - Allergens unknown: `allergens` NULL = not confirmed, shown as "ask at the counter" (SAF-2). Never show "None listed" for unconfirmed items.
   - Alcohol items are added but marked unavailable until the client decides on online alcohol sales.
   - Oxtail (Thursdays) and Stew Peas (Wednesdays) are daily specials; the Manager switches is_available on for their day, so they show in "Today's specials" only then. Day noted in the description.
-  - Categories: "Food" and "Drinks". Only Chicken & Fries is made-to-order. Descriptions empty until the client says what comes with each meal.
+  - Categories (Part 10): Chicken, Pork & Beef, Goat & Fish, Mixes, Sodas, Water & Juice, Energy & Sports, Alcohol. Each has its own sort_order block (100s, 200s, ... 1500s). Only Chicken & Fries is made-to-order.
+  - Menu usability parts: 10 categories, 11 sticky bar + highlight + 4 cards per row, 12 compact rows for single-price items, 13 search. Then customizations, then cart. Descriptions empty until the client says what comes with each meal.
 
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)
