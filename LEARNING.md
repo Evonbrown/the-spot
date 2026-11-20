@@ -688,3 +688,63 @@ The delivery locations moved from code (`store-info.ts`) into a database table, 
 ### Possible lecturer questions
 - *How does the Manager change the delivery fee?* Edit `delivery_fee` (Table Editor now, Manager screen in step 7) and set `fee_confirmed` to true. No code change.
 - *Why not delete a location you stop delivering to?* Old orders point to it. Setting `is_active = false` hides it from customers but keeps the history correct.
+
+## Part 19: The order tables and `create_order` (database only)
+Everything needed to **store** an order: 5 tables, the 7 order statuses, the rules for who can read them, and one function that saves a whole order at once. No app code yet: the checkout page (Part 20) and the server action that calls `create_order` (Part 21) come next.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0006_orders.sql` | Data | `order_status` enum, 5 tables, rules, indexes, RLS, `create_order()`. |
+| `supabase/tests/0006_orders_checks.sql` | Data (tests) | 8 blocks to run one at a time; each ends in `rollback` (no test data left). |
+
+### The tables (SDS: Order, OrderItem, Customization, OrderStatus, Payment)
+| Table | Key columns |
+|---|---|
+| `orders` | `id` = **Order ID** (starts at 1001), `customer_id`, `fulfilment` (PICKUP/DELIVERY), `delivery_location_id`, `requested_time`, `is_asap`, `status` (starts PENDING), `items_total`, `delivery_fee`, `total`, `client_request_id` (unique) |
+| `order_items` | item, `size`, **`unit_price` copied at order time**, `quantity` 1–10, `note` ≤ 200, `line_total` |
+| `order_item_customizations` | each chosen extra with its **price copied at order time** |
+| `order_status_history` | every status + when + who (PENDING is the first row) |
+| `payments` | `method` LYNK/CASH, `amount`, `status` UNPAID (PAID/REFUNDED in step 7) |
+
+### Rules the database enforces
+- **The 7 statuses** are an enum: exactly PENDING, IN_PROGRESS, READY_FOR_PICKUP, BEING_DELIVERED, COMPLETED, CANCELLED, ABANDONED.
+- **Total adds up:** `total = items_total + delivery_fee` (CHECK).
+- **Delivery needs a location; pickup has none and no fee** (CHECK).
+- **Quantity 1–10, note ≤ 200 characters, no negative money** (CHECKs).
+- **Foreign keys:** an order must point to a real customer, menu items and location. That's also why the menu seed's `truncate` will now be refused once orders exist: it protects order history.
+
+### Who can do what (RLS)
+| Action | Visitor | The customer who ordered | Any other user | Our server (secret key) |
+|---|---|---|---|---|
+| Read the order, items, extras, history, payment | ❌ | ✅ | ❌ | ✅ |
+| Insert / change orders directly | ❌ | ❌ | ❌ | only via `create_order` |
+| Run `create_order()` | ❌ | ❌ | ❌ | ✅ |
+
+### Why the secret key is needed (and why it must stay on the server)
+Supabase gives us **two keys**:
+- **Publishable key** (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`): safe in the browser. Everything done with it is limited by RLS. Anyone can see it in the page's code, so it must never be able to do anything RLS forbids.
+- **Secret key** (`SUPABASE_SECRET_KEY`, the "service_role"): **skips RLS completely**. Whoever has it can read and change *any* row.
+
+**Why we need the secret key now:** creating an order must be impossible for customers to do directly, otherwise someone could use the publishable key to save an order with any price they like (e.g. J$0). So customers get **no** insert rights, and `create_order()` can only be run by `service_role`. Our server action (Part 21) checks every rule, recalculates every price from the database, and only then uses the secret key to call `create_order()`.
+
+**How we keep it secret:**
+1. It goes in `.env.local` as `SUPABASE_SECRET_KEY`, **without** the `NEXT_PUBLIC_` prefix. Next.js only sends `NEXT_PUBLIC_…` variables to the browser, so without the prefix it stays on the server.
+2. Only server-only code will use it (a file marked `server-only` in Part 21, so the build fails if browser code ever imports it).
+3. `.env.local` is in `.gitignore` (checked before every push), so it's never on GitHub. On Vercel it's entered in the project's Environment Variables.
+4. If it ever leaked, we would **rotate** it (make a new one in Supabase), and the old one would stop working.
+
+### Key concepts
+- **Copy prices into the order:** `unit_price` and `extra_price` are saved at order time, so later menu changes never alter old orders or old sales reports (FR-06).
+- **One transaction:** `create_order()` saves the order, items, extras, first status and payment **all or nothing**: never half an order.
+- **No duplicate orders (`client_request_id`):** the checkout page makes one random id per checkout. A double tap or network retry sends the same id, and `create_order` returns the first order's number instead of making a second order.
+- **Defence in depth:** the server checks everything (Part 21); the database *also* checks that totals add up, quantities are 1–10, delivery has a location, etc. If one layer has a bug, the other still stops bad data.
+- **Indexes:** like a book's index, they help Postgres find a customer's orders quickly at lunchtime (PR-3).
+- **A statement sees a "snapshot":** one SQL statement reads the database as it was when that statement *started*. In our first test, `create_order` and a `count(*)` in the **same** SELECT gave count 0, because the count couldn't see the row just added. Splitting it into two statements fixed the test (the function itself was fine).
+- **Rollback doesn't reset counters:** Postgres never reuses an id, even from a cancelled transaction. That's why the test file ends by resetting the Order ID counter to 1001.
+
+### Possible lecturer questions
+- *Why can't customers insert orders, if they're the ones ordering?* Because the public key is visible to everyone. If it could insert orders, prices could be faked. Orders are created by our server after it has checked and priced everything.
+- *What does the secret key do, and where is it?* It skips RLS. It lives only on the server (`.env.local`, Vercel settings), never in browser code or on GitHub.
+- *What stops two orders from one double tap?* `client_request_id` is unique; the second attempt returns the first order's ID.
+- *Why copy the price into `order_items`?* So changing a menu price tomorrow doesn't change what yesterday's customer paid.

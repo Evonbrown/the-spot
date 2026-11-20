@@ -27,8 +27,13 @@ Built with **Next.js** (App Router, TypeScript), **Tailwind CSS** and **Supabase
    2. `supabase/migrations/0002_menu_items.sql`
    3. `supabase/migrations/0003_menu_item_sizes.sql`
    4. `supabase/migrations/0004_customizations.sql`
-   5. `supabase/seed/real_menu_items.sql` (the menu)
-   6. `supabase/seed/sample_customizations.sql` (sample extras)
+   5. `supabase/migrations/0005_delivery_locations.sql`
+   6. `supabase/migrations/0006_orders.sql`
+   7. `supabase/seed/real_menu_items.sql` (the menu)
+   8. `supabase/seed/sample_customizations.sql` (sample extras)
+   9. `supabase/seed/sample_delivery_locations.sql` (delivery places, sample fee)
+
+   Optional checks for the order tables: `supabase/tests/0006_orders_checks.sql` (run one block at a time).
 
 4. **Start the app**
    ```bash
