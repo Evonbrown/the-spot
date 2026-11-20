@@ -40,9 +40,7 @@ export default async function MenuPage() {
   return (
     <main className="mx-auto w-full max-w-5xl px-4 pb-12">
       <h1 className="pt-6 text-3xl font-extrabold">Menu</h1>
-      <p className="mt-1 text-sm text-stone-600">
-        Sample items for now. Not The Spot&apos;s real menu yet.
-      </p>
+      <p className="mt-1 text-sm text-stone-600">Prices in J$.</p>
 
       {items === null ? (
         // The database could not be reached.

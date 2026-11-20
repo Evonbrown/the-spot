@@ -313,3 +313,38 @@ The real menu board sells food in up to 3 sizes with different prices (Fry Chick
 - *Why not a separate table for sizes?* It would add a class not in our SDS. Columns keep one row per dish, so allergens are stored once.
 - *What stops an item from having no price?* The `menu_items_one_pricing_style` CHECK constraint, enforced by the database even for a manager.
 - *Why show "ask at the counter" instead of "None"?* SAF-2. We don't know the real allergens yet, and "None" could hurt someone with an allergy.
+
+---
+
+## Part 9: The real menu (Build step 2)
+The 8 made-up items are replaced by The Spot's real menu, copied from photos of the menu boards (`the-spot-real-menu.md`): **16 food items** with Small / Medium / Large prices and **40 drinks** with one price each, **56 items** in total.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/seed/real_menu_items.sql` | Data | **New.** Empties `menu_items` and adds the real menu, all in one transaction. |
+| `supabase/seed/sample_menu_items.sql` | — | **Deleted.** The sample items are gone. |
+| `src/app/menu/page.tsx` | Presentation | The "Sample items" note now says "Prices in J$." |
+| `the-spot-real-menu.md` | — | The source of the data, plus the open questions for the client. |
+
+### How the decisions show up in the data
+| Decision | In the seed |
+|---|---|
+| No price on the board | Snapper Fish, Boom (both), Supligen, True Juice are left out |
+| Curry Goat Large unclear | 1500, with an "unconfirmed" comment |
+| Allergens unknown (SAF-2) | `allergens = NULL` for every item → "please ask at the counter" |
+| Alcohol not decided | 11 alcohol items have `is_available = false` (greyed out) |
+| Day-only dishes | Oxtail / Stew Peas: `is_daily_special = true`, start unavailable, description "Thursdays only" / "Wednesdays only" |
+| Made to order | Only Chicken & Fries |
+| Changed prices | The new price is used (Curry Goat Medium 1250, Arizona 450, Gatorade 350, Monster 350) |
+
+### Key concepts
+- **Transaction (`begin; … commit;`):** a group of changes that happen **all together or not at all**. If one row breaks a rule, Postgres cancels the whole seed, so the old menu stays, and we never get half a menu.
+- **`truncate … restart identity`:** empties the table quickly and restarts the id numbers at 1. It's safe now because nothing points at menu items. Once orders exist, Postgres will refuse it, which protects order history.
+- **sort_order with gaps (10, 20, 30…):** the Manager can put a new item at 15 without renumbering everything else.
+- **Daily specials + `is_available`:** the Home page only shows specials that are available. So switching Oxtail on on Thursday makes it appear in "Today's specials"; switching it off hides it again. No extra weekday code needed.
+
+### Possible lecturer questions
+- *Why are some board items missing?* They have no price on the board, and the database refuses an item without a price. We're waiting for the client.
+- *Why does every item say "ask at the counter" for allergens?* SAF-2: no allergens are confirmed yet, and claiming "None" could be dangerous.
+- *What happens if the seed has a mistake halfway through?* It's a transaction, so everything is cancelled and the table is unchanged.

@@ -21,7 +21,8 @@
 --
 -- HOW TO RUN: Supabase dashboard -> SQL Editor -> New query -> paste this whole
 --      file -> Run. Run it ONCE (running it again fails with "already exists").
---      Then run supabase/seed/sample_menu_items.sql to add the sample items.
+--      Then run 0003_menu_item_sizes.sql, and supabase/seed/real_menu_items.sql
+--      to add the menu items.
 -- =============================================================================
 
 
