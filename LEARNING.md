@@ -463,3 +463,46 @@ A search box at the top of the Menu page. Typing instantly hides items that don'
 - *Does every key press query the database?* No. The browser filters the items it already received, so it's instant and puts no load on Supabase at lunchtime (PR-3).
 - *Why did you split `menu.ts`?* The search runs in the browser, and browser code must not include server-only database code. Shared helpers went to `menu-helpers.ts`.
 - *What if nothing matches?* A message says so, with a Clear search button back to the full menu.
+
+---
+
+## Part 14: The `customizations` table (Build step 2)
+FR-02 says customers can add extras (sides, extra sauces) with an extra cost. This part creates the table that stores those extras, plus 7 **sample** extras, because we don't know The Spot's real ones yet. Choosing them comes in Part 15 (options panel), and keeping them in Part 16 (cart).
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0004_customizations.sql` | Data | Creates the table, its rules, the `updated_at` trigger, grants and RLS. |
+| `supabase/seed/sample_customizations.sql` | Data | 4 sample sides + 3 sample sauces, each named "… (Sample)". All-or-nothing transaction; safe to re-run. |
+
+### The `customizations` table (SDS class: Customization)
+| Column | Type | Why |
+|---|---|---|
+| `id` | bigint, auto-numbered | |
+| `name` | text | e.g. "Extra gravy (Sample)" |
+| `kind` | text, `'side'` or `'sauce'` (CHECK) | Groups extras under "Sides" / "Sauces" in the panel. |
+| `extra_price` | numeric(10,2), ≥ 0 | Exact money. 0 = "Free". |
+| `is_available` | boolean | Greyed out and can't be ticked when false. |
+| `sort_order` | integer | Order in the panel. |
+| `created_at`, `updated_at` | timestamptz | `updated_at` kept by the shared `set_updated_at()` trigger. |
+
+### Who can do what (RLS), same as `menu_items`
+| Action | Visitor | Customer / other staff | Manager |
+|---|---|---|---|
+| Read extras | ✅ | ✅ | ✅ |
+| Add / edit / delete extras | ❌ | ❌ | ✅ |
+
+### Decisions behind the design
+- **One shared list for all food, none for drinks:** so the table has **no link to `menu_items`**. The app simply offers every available extra on every sized item. (The alternative, a link table `menu_item_customizations`, would let each dish have its own extras, but adds a table not in our plan.)
+- **Tick boxes, each at most once:** so there's no quantity column.
+- **No fries side (yet):** fries are made-to-order, which would need the 15-minute lead-time rule (FR-01) for extras too.
+
+### Key concepts
+- **Reusing what we built:** `current_user_role()` (Part 6) and `set_updated_at()` (Part 6) are shared by this table. Writing them once means one rule for "only a manager", everywhere.
+- **text + CHECK vs enum:** both limit a column to fixed values. We used an enum for roles (Part 2) and a CHECK for `kind` here, because a CHECK is easier to change if the client adds a new kind later.
+- **Price snapshot (coming in step 3):** when an order is placed, the price of each chosen extra is copied into the order, so changing a price later never changes old orders.
+
+### Possible lecturer questions
+- *Where is the meal note stored?* Not here. It's typed per item in the panel (Part 15), kept in the cart (Part 16) and saved on the order item at checkout (step 3).
+- *How do you know which items get extras?* Decision: all sized items (food). Drinks are single-price and get none.
+- *Can a customer change an extra's price?* No. RLS only lets a manager insert, update or delete.
