@@ -200,3 +200,47 @@ Step 1 was "Project setup, Supabase connection, auth (sign up / log in) and role
 - The page calls `requireRole(["manager"])` (Application layer).
 - That calls `getCurrentProfile()`, which reads the `profiles` row. RLS allows it because it's the manager's own row (Data layer).
 - The role matches, so the screen is shown (Presentation layer).
+
+---
+
+## Part 6: The `menu_items` table (Build step 2)
+The menu moves from a code file into a real database table, so the Manager can later change items and prices without code changes (Maintainability, SRS 3). The pages still use the sample file until Part 7.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0002_menu_items.sql` | Data | Creates `current_user_role()`, the `menu_items` table, an `updated_at` trigger, the grants and the RLS rules. You run it in the SQL Editor. |
+| `supabase/seed/sample_menu_items.sql` | Data | Adds the 8 sample items (same as `src/lib/sample-menu.ts`). Run it once, after the migration. |
+
+### The `menu_items` table
+| Column | Type | Why |
+|---|---|---|
+| `id` | bigint, auto-numbered | Each item's unique number. |
+| `name`, `description` | text | Shown on the menu (FR-01). |
+| `price` | numeric(10,2), must be ≥ 0 | Exact money. See "Key concepts". |
+| `category` | text | e.g. Meals, Sides, Drinks. Plain text so the Manager can add new ones. |
+| `allergens` | text[] (a list) | SAF-2. `{}` = no listed allergens. |
+| `is_available` | boolean | FR-01: false = greyed out, can't be added. Used instead of stock tracking. |
+| `is_daily_special` | boolean | FR-01: highlighted. |
+| `is_made_to_order` | boolean | FR-01: e.g. fries → pickup needs at least 15 min. |
+| `sort_order` | integer | Order on the menu page. |
+| `created_at`, `updated_at` | timestamptz | When added / last changed (a trigger keeps `updated_at` correct). |
+
+### Who can do what (RLS)
+| Action | Visitor (not logged in) | Customer / other staff | Manager |
+|---|---|---|---|
+| Read the menu | ✅ | ✅ | ✅ |
+| Add / edit / delete items | ❌ | ❌ | ✅ |
+
+### Key concepts
+- **numeric vs float for money:** a float is an *approximate* number (`0.1 + 0.2` = `0.30000000000000004`). `numeric(10,2)` stores the exact value with 2 decimal places. Money must add up exactly, because the daily closeout (FR-06) compares expected cash with counted cash.
+- **CHECK constraint:** a rule the database itself enforces on every row. `check (price >= 0)` means a negative price is refused even if a page has a bug or someone sends a hand-made request.
+- **Grants vs RLS (again):** grants decide *which actions* a kind of user may try (anyone may SELECT; logged-in users may *try* to edit). RLS decides *which rows* the action works on (edits only succeed for a manager).
+- **`current_user_role()` helper:** one function that answers "what is this user's role?" for every RLS rule. It is `security definer`, meaning it runs with its owner's permissions, so it can read the role safely, and it is reused by later tables (orders, refunds, closeouts).
+- **Migration vs seed:** a migration builds the *structure* (tables, rules). Seed data is *starting content*. Keeping them apart lets us swap in The Spot's real menu later without touching the structure.
+
+### Possible lecturer questions
+- *Why is the menu readable without logging in?* Our decision: anyone can browse; only ordering needs an account. RLS has a SELECT rule for `anon` (visitors).
+- *What stops a customer from changing a price through the API?* The UPDATE policy only passes when `current_user_role()` is `'manager'`. For anyone else the update changes 0 rows.
+- *Why `numeric` and not `float`?* Floats round. Money must be exact, especially for cash closeout.
+- *Can a manager set a price of -500?* No. The CHECK constraint refuses it, even for a manager.
