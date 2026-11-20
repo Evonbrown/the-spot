@@ -3,33 +3,44 @@
  *
  * WHAT: The Home page of The Spot: welcome message, opening hours,
  *       pickup/delivery info, today's specials and a "View menu" button.
- * LAYER: Presentation. Uses SAMPLE data for now (src/lib/sample-menu.ts).
+ * LAYER: Presentation. The specials come from getMenuItems() (Application
+ *        layer, src/lib/menu.ts), which reads the menu_items table (Data layer).
  */
 
 import Link from "next/link";
 import MenuItemCard from "@/components/MenuItemCard";
-import {
-  DELIVERY_LOCATIONS,
-  OPENING_HOURS,
-  SAMPLE_MENU_ITEMS,
-} from "@/lib/sample-menu";
+import { getMenuItems, type MenuItem } from "@/lib/menu";
+import { DELIVERY_LOCATIONS, OPENING_HOURS } from "@/lib/store-info";
 
 /*
  * HomePage
+ * "async" because it waits for the menu items (same cached function as the
+ * Menu page, so both pages share one saved copy).
  * Mobile-first: everything is stacked in one column on phones. On wider
  * screens ("sm:" = 640px and up) the two info cards sit side by side.
  */
-export default function HomePage() {
+export default async function HomePage() {
+  // Load the menu. If it fails, we simply hide the specials section: the rest
+  // of the Home page (hours, delivery info, "View menu") still works.
+  let items: MenuItem[] = [];
+  try {
+    items = await getMenuItems();
+  } catch {
+    items = [];
+  }
+
   // FR-01: daily specials are highlighted. Only show ones that can be ordered.
-  const specials = SAMPLE_MENU_ITEMS.filter(
-    (item) => item.isDailySpecial && item.isAvailable
+  const specials = items.filter(
+    (item) => item.isDailySpecial && item.isAvailable,
   );
 
   // Turns ["UWI Mona", "UTech", "UWI Hospital"] into "UWI Mona, UTech and UWI Hospital".
   // We build it from DELIVERY_LOCATIONS (instead of typing the names) so that if the
   // Manager changes the locations later, this sentence updates too.
   const locationsText =
-    DELIVERY_LOCATIONS.slice(0, -1).join(", ") + " and " + DELIVERY_LOCATIONS.at(-1);
+    DELIVERY_LOCATIONS.slice(0, -1).join(", ") +
+    " and " +
+    DELIVERY_LOCATIONS.at(-1);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-4 pb-12">
@@ -39,8 +50,8 @@ export default function HomePage() {
           Welcome to <span className="text-brand">The Spot</span>
         </h1>
         <p className="mx-auto mt-3 max-w-md text-stone-600">
-          Order ahead, skip the line. Hot meals ready for pickup, or delivered to{" "}
-          {locationsText}.
+          Order ahead, skip the line. Hot meals ready for pickup, or delivered
+          to {locationsText}.
         </p>
         {/* The main action, big and easy to tap. Usability: Menu -> Cart -> Checkout in under 3 minutes */}
         <Link
@@ -55,8 +66,12 @@ export default function HomePage() {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-xl bg-white p-5 shadow-sm">
           <h2 className="font-bold">Opening hours</h2>
-          <p className="mt-1 text-2xl font-extrabold text-brand">{OPENING_HOURS}</p>
-          <p className="mt-1 text-sm text-stone-600">Pickup and delivery, every day we&apos;re open.</p>
+          <p className="mt-1 text-2xl font-extrabold text-brand">
+            {OPENING_HOURS}
+          </p>
+          <p className="mt-1 text-sm text-stone-600">
+            Pickup and delivery, every day we&apos;re open.
+          </p>
         </div>
 
         <div className="rounded-xl bg-white p-5 shadow-sm">
@@ -77,15 +92,18 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Today's specials, reusing the same card as the menu page */}
-      <section className="mt-10">
-        <h2 className="mb-3 text-2xl font-bold">Today&apos;s specials</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {specials.map((item) => (
-            <MenuItemCard key={item.id} item={item} />
-          ))}
-        </div>
-      </section>
+      {/* Today's specials, reusing the same card as the menu page.
+          Only shown when there is at least one available special. */}
+      {specials.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-3 text-2xl font-bold">Today&apos;s specials</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {specials.map((item) => (
+              <MenuItemCard key={item.id} item={item} />
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

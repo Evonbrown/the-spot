@@ -2,39 +2,81 @@
  * src/app/menu/page.tsx   ->   http://localhost:3000/menu
  *
  * WHAT: The Menu page. Shows every menu item, grouped by category (FR-01).
- * LAYER: Presentation. For now it reads SAMPLE data from src/lib/sample-menu.ts.
- *        In Build step 2 it will read the real items from Supabase instead.
+ * LAYER: Presentation. Gets its data from getMenuItems() (Application layer,
+ *        src/lib/menu.ts), which reads the menu_items table (Data layer).
  *
  * In Next.js the folder name becomes the web address: app/menu/page.tsx = "/menu".
  */
 
 import MenuItemCard from "@/components/MenuItemCard";
-import { MENU_CATEGORIES, SAMPLE_MENU_ITEMS } from "@/lib/sample-menu";
+import { getCategories, getMenuItems, type MenuItem } from "@/lib/menu";
 
 /*
  * MenuPage
+ * "async" because it waits for the menu items. It is a Server Component (no
+ * "use client"), so the database work happens on the server and the browser
+ * only receives the finished HTML (fast on phones: PR-1).
+ *
+ * Because getMenuItems() is cached ('use cache'), Next.js can build this page
+ * ahead of time and refresh it about every minute, instead of on every visit.
+ *
  * Layout:
- *  1. A row of category buttons (Meals / Sides / Drinks). These are plain links to
- *     "#meals" etc., so tapping one scrolls down to that section. No JavaScript
- *     is needed, which keeps the page fast (PR-1: menu loads within 3 s).
+ *  1. A row of category buttons. Plain links to "#meals" etc., so tapping one
+ *     scrolls to that section. No JavaScript needed.
  *  2. One section per category, each with a grid of cards.
- *     Mobile-first: "grid-cols-1" = one column on phones. "sm:grid-cols-2" and
- *     "lg:grid-cols-3" add more columns on bigger screens.
+ *     Mobile-first: "grid-cols-1" = one column on phones; "sm:"/"lg:" add more
+ *     columns on bigger screens.
  */
-export default function MenuPage() {
+export default async function MenuPage() {
+  // Try to load the menu. If it fails, items stays null and we show a message
+  // below instead of crashing the whole page.
+  let items: MenuItem[] | null = null;
+  try {
+    items = await getMenuItems();
+  } catch {
+    items = null;
+  }
+
   return (
     <main className="mx-auto w-full max-w-5xl px-4 pb-12">
       <h1 className="pt-6 text-3xl font-extrabold">Menu</h1>
       <p className="mt-1 text-sm text-stone-600">
-        Sample items for the design preview. Not The Spot&apos;s real menu yet.
+        Sample items for now. Not The Spot&apos;s real menu yet.
       </p>
 
+      {items === null ? (
+        // The database could not be reached.
+        <MenuMessage text="Sorry, the menu couldn't load. Please refresh the page to try again." />
+      ) : items.length === 0 ? (
+        // The table is empty (e.g. before the Manager adds items).
+        <MenuMessage text="There are no menu items yet. Please check back soon." />
+      ) : (
+        <MenuSections items={items} />
+      )}
+    </main>
+  );
+}
+
+/*
+ * MenuSections
+ * The category buttons + one section per category.
+ * Categories come FROM THE DATA (getCategories), so a new category added by the
+ * Manager gets its own button and section automatically.
+ */
+function MenuSections({ items }: { items: MenuItem[] }) {
+  const categories = getCategories(items);
+
+  // Turns "Hot Meals" into "hot-meals", a safe value for a link like "#hot-meals".
+  const toId = (category: string) => category.toLowerCase().replace(/\s+/g, "-");
+
+  return (
+    <>
       {/* Category buttons. "sticky top-14" keeps them visible just under the header. */}
       <nav className="sticky top-14 z-[5] -mx-4 mt-4 flex gap-2 overflow-x-auto bg-cream px-4 py-3">
-        {MENU_CATEGORIES.map((category) => (
+        {categories.map((category) => (
           <a
             key={category}
-            href={`#${category.toLowerCase()}`}
+            href={`#${toId(category)}`}
             className="min-h-11 shrink-0 rounded-full border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand hover:text-white"
           >
             {category}
@@ -43,18 +85,30 @@ export default function MenuPage() {
       </nav>
 
       {/* One section per category */}
-      {MENU_CATEGORIES.map((category) => (
+      {categories.map((category) => (
         // scroll-mt-32 stops the sticky header from covering the section title after jumping to it
-        <section key={category} id={category.toLowerCase()} className="mt-6 scroll-mt-32">
+        <section key={category} id={toId(category)} className="mt-6 scroll-mt-32">
           <h2 className="mb-3 text-xl font-bold">{category}</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {SAMPLE_MENU_ITEMS.filter((item) => item.category === category).map((item) => (
-              // "key" helps React keep track of each card in the list
-              <MenuItemCard key={item.id} item={item} />
-            ))}
+            {items
+              .filter((item) => item.category === category)
+              .map((item) => (
+                // "key" helps React keep track of each card in the list
+                <MenuItemCard key={item.id} item={item} />
+              ))}
           </div>
         </section>
       ))}
-    </main>
+    </>
+  );
+}
+
+/*
+ * MenuMessage
+ * A simple box for "couldn't load" / "no items yet" messages.
+ */
+function MenuMessage({ text }: { text: string }) {
+  return (
+    <p className="mt-6 rounded-xl bg-white p-5 text-center text-stone-700 shadow-sm">{text}</p>
   );
 }

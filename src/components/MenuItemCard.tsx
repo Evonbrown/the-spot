@@ -9,7 +9,7 @@
  * items. Writing the card once means they always look the same.
  */
 
-import { formatPrice, type MenuItem } from "@/lib/sample-menu";
+import { formatPrice, type MenuItem } from "@/lib/menu";
 
 /*
  * MenuItemCard

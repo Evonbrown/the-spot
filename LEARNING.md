@@ -244,3 +244,38 @@ The menu moves from a code file into a real database table, so the Manager can l
 - *What stops a customer from changing a price through the API?* The UPDATE policy only passes when `current_user_role()` is `'manager'`. For anyone else the update changes 0 rows.
 - *Why `numeric` and not `float`?* Floats round. Money must be exact, especially for cash closeout.
 - *Can a manager set a price of -500?* No. The CHECK constraint refuses it, even for a manager.
+
+---
+
+## Part 7: Menu pages read from the database (Build step 2)
+The Menu page and the Home page's "Today's specials" now show the rows in `menu_items` instead of a code file. When the Manager changes a price or availability in the database, the site follows within about a minute, with no code change (Maintainability). The sample file `src/lib/sample-menu.ts` is deleted.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/supabase/public.ts` | Application | **New.** A Supabase connection with **no login cookies** (always "anon"). Only for public data like the menu. |
+| `src/lib/menu.ts` | Application | **New.** `getMenuItems()` (cached read of `menu_items`), `getCategories()`, the `MenuItem` type and `formatPrice()`. |
+| `src/lib/store-info.ts` | Application | **New.** `OPENING_HOURS` and `DELIVERY_LOCATIONS` (moved; locations go into the database in a later part). |
+| `src/app/menu/page.tsx` | Presentation | Loads items with `getMenuItems()`. Categories are built from the data. Shows a friendly message if loading fails or the menu is empty. |
+| `src/app/page.tsx` | Presentation | Specials come from the database. If loading fails, the specials section is hidden, and the rest of the page still works. |
+| `src/components/MenuItemCard.tsx` | Presentation | Only the import changed. |
+
+### How a menu visit flows through the three layers
+1. A visitor opens `/menu` (Presentation).
+2. The page calls `getMenuItems()` (Application).
+3. If a saved copy younger than ~1 minute exists, it is used straight away. Otherwise it queries `menu_items` as "anon"; RLS allows SELECT for everyone (Data).
+4. The rows are converted (`is_available` → `isAvailable`) and the page HTML is built on the server.
+
+### Key concepts
+- **Caching (`'use cache'`):** Next.js keeps a saved copy of `getMenuItems()`'s result. With 100 customers at lunch (PR-3), most visits use the copy instead of hitting the database, which keeps the menu fast (PR-1). The build output shows `/menu` with "Revalidate 1m".
+- **`cacheLife("minutes")`:** how long the copy is trusted (refreshed about every minute). **Trade-off:** a price change can take up to ~1 minute to appear. That's safe because the server re-checks prices and availability at checkout (step 3).
+- **`cacheTag("menu")`:** a label on the copy. In step 7, when the Manager edits the menu in the app, we'll use the label to throw the copy away immediately.
+- **Why a cookie-free connection?** A cached copy is shared by everyone, so it must not depend on one person's login. Next.js forbids reading cookies inside cached code. The menu is public anyway, so we read it as "anon".
+- **Errors aren't cached:** if the database is down, `getMenuItems()` throws, nothing is saved, and the next visit tries again. The page shows a friendly message instead of crashing.
+- **snake_case vs camelCase:** the database says `is_available`; our TypeScript says `isAvailable`. Converting in one place (`menu.ts`) keeps database names out of the pages.
+
+### Possible lecturer questions
+- *How does the menu meet PR-1 (3 s)?* It's built on the server and cached, so most visits get ready-made HTML without a database query.
+- *If the Manager marks an item unavailable, could a customer still order it from an old cached page?* They might still see it for up to a minute, but checkout re-checks availability on the server (step 3), so the order would be refused.
+- *Why is the menu readable while logged out?* Our decision: anyone can browse. RLS allows SELECT for `anon`, and we use the cookie-free connection.
+- *How does a new category appear?* `getCategories()` builds the list from the items, so a new category text creates a new section automatically.
