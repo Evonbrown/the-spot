@@ -3,21 +3,37 @@
  *
  * WHAT: Shows ONE menu item as a card: name, description, price (or its
  *       Small / Medium / Large prices), allergens, badges (Daily special /
- *       Made to order) and an "Add" button.
+ *       Made to order) and an "Add" button. For food (sized items), "Add"
+ *       opens the options panel (AddToCartButton, Part 15).
  * LAYER: Presentation.
  *
  * WHY a component? The menu page and the home page ("Today's specials") both show
  * items. Writing the card once means they always look the same.
  */
 
-import { allergenText, formatPrice, isSinglePrice, type MenuItem } from "@/lib/menu-helpers";
+import AddToCartButton from "@/components/AddToCartButton";
+import {
+  allergenText,
+  formatPrice,
+  isSinglePrice,
+  type Customization,
+  type MenuItem,
+} from "@/lib/menu-helpers";
 
 /*
  * MenuItemCard
  * "{ item }" is a PROP: information passed into a component, like an argument
  * passed into a function. Example: <MenuItemCard item={jerkChicken} />
+ * customizations = the extras offered in the options panel (FR-02; the same
+ * list for every food item, by decision).
  */
-export default function MenuItemCard({ item }: { item: MenuItem }) {
+export default function MenuItemCard({
+  item,
+  customizations,
+}: {
+  item: MenuItem;
+  customizations: Customization[];
+}) {
   // FR-01: unavailable items are greyed out and cannot be added.
   const unavailable = !item.isAvailable;
 
@@ -62,7 +78,7 @@ export default function MenuItemCard({ item }: { item: MenuItem }) {
 
       {/* Sizes (Small / Medium / Large) and their prices, only for sized items.
           Only the sizes actually offered are listed (e.g. Fish: Large only).
-          Choosing a size comes with the cart part; for now we just show them. */}
+          The customer chooses one in the options panel after tapping "Add". */}
       {!singlePrice && (
         <ul className="flex flex-wrap gap-2" aria-label="Sizes and prices">
           {item.priceOptions.map((option) => (
@@ -84,15 +100,21 @@ export default function MenuItemCard({ item }: { item: MenuItem }) {
           {singlePrice ? formatPrice(fromPrice) : `From ${formatPrice(fromPrice)}`}
         </span>
 
-        {/* PREVIEW ONLY: this button does nothing yet. The cart is a later part.
-            min-h-11 (44px) is the recommended minimum size for a tap target on phones. */}
-        <button
-          type="button"
-          disabled={unavailable}
-          className="min-h-11 rounded-lg bg-brand px-5 font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
-        >
-          {unavailable ? "Unavailable" : "Add"}
-        </button>
+        {singlePrice ? (
+          // A single-price item has nothing to choose. Part 16 (cart) will make
+          // this button add it straight to the cart; for now it does nothing.
+          // min-h-11 (44px) is the recommended minimum size for a tap target on phones.
+          <button
+            type="button"
+            disabled={unavailable}
+            className="min-h-11 rounded-lg bg-brand px-5 font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
+          >
+            {unavailable ? "Unavailable" : "Add"}
+          </button>
+        ) : (
+          // Food (sized items): opens the options panel (size, extras, note, quantity).
+          <AddToCartButton item={item} customizations={customizations} />
+        )}
       </div>
     </article>
   );

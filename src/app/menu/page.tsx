@@ -10,8 +10,9 @@
  */
 
 import MenuBrowser from "@/components/MenuBrowser";
+import { getCustomizations } from "@/lib/customizations";
 import { getMenuItems } from "@/lib/menu";
-import type { MenuItem } from "@/lib/menu-helpers";
+import type { Customization, MenuItem } from "@/lib/menu-helpers";
 
 /*
  * MenuPage
@@ -21,7 +22,7 @@ import type { MenuItem } from "@/lib/menu-helpers";
  * time and refresh it about every minute, instead of on every visit (PR-1).
  *
  * SPLIT OF WORK:
- *   - Server (this file): load the items, handle "couldn't load" / "empty".
+ *   - Server (this file): load the items and extras, handle "couldn't load" / "empty".
  *   - Browser (MenuBrowser): search, category highlight. It receives the items
  *     as a prop, so it never talks to the database itself.
  *
@@ -38,6 +39,16 @@ export default async function MenuPage() {
     items = null;
   }
 
+  // Load the extras for the options panel (FR-02). If they fail to load, use an
+  // empty list: the panel then simply shows no extras, and food can still be
+  // ordered. (Better than hiding the whole menu because of the extras.)
+  let customizations: Customization[] = [];
+  try {
+    customizations = await getCustomizations();
+  } catch {
+    customizations = [];
+  }
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-12">
       <h1 className="pt-6 text-3xl font-extrabold">Menu</h1>
@@ -50,7 +61,7 @@ export default async function MenuPage() {
         // The table is empty (e.g. before the Manager adds items).
         <MenuMessage text="There are no menu items yet. Please check back soon." />
       ) : (
-        <MenuBrowser items={items} />
+        <MenuBrowser items={items} customizations={customizations} />
       )}
     </main>
   );

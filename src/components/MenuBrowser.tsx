@@ -29,14 +29,24 @@ import {
   isSinglePrice,
   matchesSearch,
   sectionId,
+  type Customization,
   type MenuItem,
 } from "@/lib/menu-helpers";
 
 /*
  * MenuBrowser
- * Prop: items = ALL menu items, in sort_order (loaded by the server).
+ * Props:
+ *   items          = ALL menu items, in sort_order (loaded by the server).
+ *   customizations = the extras for the options panel (FR-02), also loaded by
+ *                    the server. Passed on to every food card.
  */
-export default function MenuBrowser({ items }: { items: MenuItem[] }) {
+export default function MenuBrowser({
+  items,
+  customizations,
+}: {
+  items: MenuItem[];
+  customizations: Customization[];
+}) {
   // What the customer has typed. Every key press updates it and React redraws
   // the list below with only the matching items.
   const [query, setQuery] = useState("");
@@ -127,7 +137,7 @@ export default function MenuBrowser({ items }: { items: MenuItem[] }) {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {cardItems.map((item) => (
                       // "key" helps React keep track of each card in the list
-                      <MenuItemCard key={item.id} item={item} />
+                      <MenuItemCard key={item.id} item={item} customizations={customizations} />
                     ))}
                   </div>
                 )}

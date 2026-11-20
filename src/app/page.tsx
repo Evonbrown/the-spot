@@ -9,8 +9,9 @@
 
 import Link from "next/link";
 import MenuItemCard from "@/components/MenuItemCard";
+import { getCustomizations } from "@/lib/customizations";
 import { getMenuItems } from "@/lib/menu";
-import type { MenuItem } from "@/lib/menu-helpers";
+import type { Customization, MenuItem } from "@/lib/menu-helpers";
 import { DELIVERY_LOCATIONS, OPENING_HOURS } from "@/lib/store-info";
 
 /*
@@ -28,6 +29,15 @@ export default async function HomePage() {
     items = await getMenuItems();
   } catch {
     items = [];
+  }
+
+  // The extras for the specials' options panel (FR-02). If they fail to load,
+  // the panel just shows no extras.
+  let customizations: Customization[] = [];
+  try {
+    customizations = await getCustomizations();
+  } catch {
+    customizations = [];
   }
 
   // FR-01: daily specials are highlighted. Only show ones that can be ordered.
@@ -100,7 +110,7 @@ export default async function HomePage() {
           <h2 className="mb-3 text-2xl font-bold">Today&apos;s specials</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {specials.map((item) => (
-              <MenuItemCard key={item.id} item={item} />
+              <MenuItemCard key={item.id} item={item} customizations={customizations} />
             ))}
           </div>
         </section>

@@ -53,6 +53,57 @@ export type MenuItem = {
 };
 
 /*
+ * Customization: one extra a customer can tick for a food item
+ * (SDS class: Customization; table: customizations, see 0004).
+ * Decision: the same list is offered on every food item; drinks get none.
+ */
+export type Customization = {
+  id: number;
+  name: string; // e.g. "Coleslaw (Sample)"
+  kind: "side" | "sauce"; // groups them under "Sides" / "Sauces" in the panel
+  extraPrice: number; // J$, exact. 0 = "Free"
+  isAvailable: boolean; // false = greyed out, can't be ticked
+};
+
+/* Decision: a cart line holds 1 to 10 of an item. */
+export const MAX_QUANTITY = 10;
+
+/* Decision: a meal note is at most 200 characters (checked again on the server at checkout). */
+export const MAX_NOTE_LENGTH = 200;
+
+/*
+ * calculateLinePrice(unitPrice, extras, quantity)
+ * FR-02: the price of one cart line = (size price + chosen extras) x quantity.
+ *   Example: Fry Chicken Large 1200 + Coleslaw 150 + Extra gravy 50, quantity 2
+ *            -> (1200 + 150 + 50) x 2 = 2800
+ *
+ * WHY one shared function? The options panel (Part 15), the cart (Part 16) and
+ * the server at checkout (Build step 3) must all get EXACTLY the same answer.
+ *
+ * WHY count in cents? JavaScript numbers are floats (approximate), like the
+ * "float" we avoided in the database: 0.1 + 0.2 = 0.30000000000000004. Turning
+ * each price into whole cents first (1200 -> 120000) and adding whole numbers
+ * is always exact. We turn the answer back into dollars at the end.
+ */
+export function calculateLinePrice(
+  unitPrice: number,
+  extras: { extraPrice: number }[],
+  quantity: number
+): number {
+  const toCents = (dollars: number) => Math.round(dollars * 100);
+  const extrasCents = extras.reduce((sum, extra) => sum + toCents(extra.extraPrice), 0);
+  return ((toCents(unitPrice) + extrasCents) * quantity) / 100;
+}
+
+/*
+ * formatExtraPrice(150) -> "+J$150"    formatExtraPrice(0) -> "Free"
+ * Used next to each extra's tick box.
+ */
+export function formatExtraPrice(price: number): string {
+  return price === 0 ? "Free" : `+${formatPrice(price)}`;
+}
+
+/*
  * getCategories(items)
  * Lists each category once, in the order it first appears (items are already
  * in sort_order). Example: ["Chicken", "Pork & Beef", ...].

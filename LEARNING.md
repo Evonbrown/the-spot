@@ -512,3 +512,39 @@ FR-02 says customers can add extras (sides, extra sauces) with an extra cost. Th
 - *Where is the meal note stored?* Not here. It's typed per item in the panel (Part 15), kept in the cart (Part 16) and saved on the order item at checkout (step 3).
 - *How do you know which items get extras?* Decision: all sized items (food). Drinks are single-price and get none.
 - *Can a customer change an extra's price?* No. RLS only lets a manager insert, update or delete.
+
+---
+
+## Part 15: The options panel (Build step 2)
+Tapping **Add** on a food item opens a panel to choose a **size**, tick **extras** (sides/sauces), type a **meal note** and pick a **quantity**, with the **price updating live** (FR-02). There's no cart yet: "Add to cart" shows a confirmation message of what *would* be added. Part 16 adds the real cart.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/components/ItemOptionsDialog.tsx` | Presentation | **New, client.** The panel (a `<dialog>`): size radios, extras tick boxes, meal note (max 200), quantity 1–10, live "Add to cart · J$…" button. |
+| `src/components/AddToCartButton.tsx` | Presentation | **New, client.** The Add button that opens the panel, plus the confirmation message. |
+| `src/lib/customizations.ts` | Application | **New, server only.** `getCustomizations()`: cached, same `"menu"` cache label. |
+| `src/lib/menu-helpers.ts` | Application | `Customization` type, `calculateLinePrice()`, `formatExtraPrice()`, `MAX_QUANTITY` (10), `MAX_NOTE_LENGTH` (200). |
+| `MenuItemCard.tsx` | Presentation | Food cards use `AddToCartButton`. |
+| `menu/page.tsx`, `MenuBrowser.tsx`, `app/page.tsx` | Presentation | Load the extras on the server and pass them to the cards. |
+
+### Rules in the panel
+- **Size:** nothing pre-chosen (so nobody gets the wrong size by accident), unless there's only one size (Fish → Large). "Add to cart" stays disabled until a size is chosen.
+- **Extras:** tick boxes, each at most once; unavailable ones greyed out. If the extras fail to load, the panel shows none and food can still be ordered.
+- **Meal note:** optional, stops at 200 characters (`maxLength`), with a live counter. (The server will check it again at checkout, because browser limits can be bypassed.)
+- **Quantity:** 1 to 10; − and + are disabled at the limits.
+- **Price:** `calculateLinePrice(size price, extras, quantity)` = (size + extras) × quantity.
+
+### Key concepts
+- **`<dialog>` + `showModal()`:** the browser's built-in modal. It gives a dark backdrop, keeps keyboard focus inside, closes on **Esc**, and works with screen readers, with no extra library.
+- **Bottom sheet:** on phones the panel is full width at the bottom (easy to reach with a thumb); on computers it's a centred box (`sm:` classes).
+- **Money in cents:** JavaScript numbers are floats, so `0.1 + 0.2 = 0.30000000000000004`. `calculateLinePrice` turns prices into whole cents, adds whole numbers (always exact), then converts back.
+- **One price function everywhere:** the panel, the cart (Part 16) and the server at checkout (step 3) all use `calculateLinePrice`, so the customer is never shown one price and charged another.
+- **Fresh state each time:** the panel only exists on the page while it's open, so every opening starts with no size, no extras and quantity 1.
+- **`useCallback`:** keeps the same function between redraws, so the panel's `useEffect` doesn't re-run needlessly.
+- **Accessible forms:** `<fieldset>` + `<legend>` group the radios and tick boxes; every input has a `<label>` (tapping the text ticks the box); tap targets are at least 44px.
+
+### Possible lecturer questions
+- *How is the price calculated?* `(size price + sum of ticked extras) × quantity`, in cents, by one shared function.
+- *Why can't I add without a size?* To avoid wrong orders, the button stays disabled until a size is picked (unless there's only one size).
+- *Where does the meal note go?* Into the cart line (Part 16), then saved on the order item at checkout (step 3), where the server checks the 200-character limit again.

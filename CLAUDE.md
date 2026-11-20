@@ -56,7 +56,8 @@ Rules:
   - Categories (Part 10): Chicken, Pork & Beef, Goat & Fish, Mixes, Sodas, Water & Juice, Energy & Sports, Alcohol. Each has its own sort_order block (100s, 200s, ... 1500s). Only Chicken & Fries is made-to-order.
   - Menu usability parts: 10 categories, 11 sticky bar + highlight + 4 cards per row, 12 compact rows for single-price items, 13 search. Then customizations, then cart.
 - Customizations (FR-02): one shared list for ALL food (sized items); drinks have none (no link table). `kind` is 'side' or 'sauce'. Chosen with tick boxes, each at most once (no quantities). Real extras unknown: sample extras are marked "(Sample)" in the name until the client gives the real ones.
-- Parts: 14 customizations table + sample seed; 15 options panel on Add (size, extras, meal note, quantity, live price); 16 cart (browser storage, cart page, header count). Meal notes: max 200 characters, checked on the server at checkout; saved on the order item (Build step 3). Descriptions empty until the client says what comes with each meal.
+- Parts: 14 customizations table + sample seed; 15 options panel on Add (size, extras, meal note, quantity, live price); 16 cart (browser storage, cart page, header count). Meal notes: max 200 characters, checked on the server at checkout; saved on the order item (Build step 3).
+- Options panel: no size is pre-chosen unless the item has only one size; quantity per cart line is 1-10. Descriptions empty until the client says what comes with each meal.
 
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)
