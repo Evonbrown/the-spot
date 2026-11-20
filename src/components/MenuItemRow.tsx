@@ -17,7 +17,7 @@
  *   - SAF-2: allergens are always shown, even in the compact row.
  */
 
-import { allergenText, formatPrice, type MenuItem } from "@/lib/menu";
+import { allergenText, formatPrice, type MenuItem } from "@/lib/menu-helpers";
 
 /*
  * MenuItemRow

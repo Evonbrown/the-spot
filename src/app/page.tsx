@@ -9,7 +9,8 @@
 
 import Link from "next/link";
 import MenuItemCard from "@/components/MenuItemCard";
-import { getMenuItems, type MenuItem } from "@/lib/menu";
+import { getMenuItems } from "@/lib/menu";
+import type { MenuItem } from "@/lib/menu-helpers";
 import { DELIVERY_LOCATIONS, OPENING_HOURS } from "@/lib/store-info";
 
 /*

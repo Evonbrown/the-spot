@@ -430,3 +430,36 @@ The 40 drinks used to be 40 big cards, which made the menu very long. Now every 
 ### Possible lecturer questions
 - *How does the page decide card or row?* `isSinglePrice(item)`: one price and no sizes → row; otherwise card.
 - *Do the compact rows still meet SAF-2?* Yes, every row has an allergen line, using the same `allergenText()` as the cards.
+
+---
+
+## Part 13: Menu search (Build step 2)
+A search box at the top of the Menu page. Typing instantly hides items that don't match, the category bar only shows categories with matches, and "No items match" offers a **Clear search** button. Usability: typing "pepsi" is faster than scrolling past 50 items.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/components/MenuBrowser.tsx` | Presentation | **New.** Client component: search box, result count, category bar and sections (moved here from the page). Filters the items it was given. |
+| `src/lib/menu-helpers.ts` | Application | **New.** Browser-safe types and helpers (`MenuItem`, `formatPrice`, `allergenText`, `isSinglePrice`, `getCategories`, `sectionId`, `matchesSearch`). |
+| `src/lib/menu.ts` | Application | Now **server only**: just `getMenuItems()` (database + cache). |
+| `src/app/menu/page.tsx` | Presentation | Loads the items on the server and hands them to `MenuBrowser`. |
+| `MenuItemCard.tsx`, `MenuItemRow.tsx`, `app/page.tsx` | Presentation | Import from `menu-helpers` instead of `menu`. |
+
+### How search matches (`matchesSearch`)
+- Not case-sensitive: "PEPSI" finds Pepsi.
+- Looks in the **name and category**: "water" finds all waters (and Cran Juice, because its category is "Water & Juice").
+- **Every word must match**: "fry chicken" finds Fry Chicken and Bar-B-Fry Chicken, but not Brown Stew Chicken.
+
+**Layout detail:** if a drinks section has only **1 row** (e.g. after searching "pepsi"), the white box becomes **half width with one column** on wide screens, so there's no big empty right half. With 2 or more rows it stays the full-width box with 2 columns.
+
+### Key concepts
+- **Server loads, browser filters:** the server still loads and caches the menu (fast first view, PR-1). The browser filters the 56 items it already has, so results appear on every key press with **no database query**.
+- **Server-only vs browser-safe code:** `menu.ts` uses the database and `'use cache'`, which must never be sent to the browser. A client component can only import browser-safe code, so the shared types and helpers moved to `menu-helpers.ts`. Rule of thumb: *if a file talks to the database, keep it out of `"use client"` imports.*
+- **Controlled input:** the search box's value lives in React state (`useState`). Each key press updates `query`, and React redraws the list.
+- **`useMemo`:** remembers a calculated value (the filtered list) and only recalculates when its inputs change.
+- **Accessibility:** a hidden `<label>` names the box for screen readers; `aria-live="polite"` reads out "5 items found"; `text-base` (16px) stops iPhones from zooming in on the box.
+
+### Possible lecturer questions
+- *Does every key press query the database?* No. The browser filters the items it already received, so it's instant and puts no load on Supabase at lunchtime (PR-3).
+- *Why did you split `menu.ts`?* The search runs in the browser, and browser code must not include server-only database code. Shared helpers went to `menu-helpers.ts`.
+- *What if nothing matches?* A message says so, with a Clear search button back to the full menu.

@@ -1,9 +1,7 @@
 /*
- * src/lib/menu.ts
+ * src/lib/menu.ts   (SERVER ONLY)
  *
- * WHAT: Everything the app needs to READ the menu: the MenuItem type,
- *       getMenuItems() (loads items from the menu_items table), a helper that
- *       lists the categories, and formatPrice().
+ * WHAT: getMenuItems(): loads all menu items from the menu_items table.
  *
  * LAYER: Application layer. Pages (Presentation) call getMenuItems(); it reads
  *        the menu_items table (Data layer) through the public connection.
@@ -11,56 +9,23 @@
  * WHY here and not inside the page? The Menu page and the Home page both need
  * menu items. One shared function means one place to change if the table
  * changes, and both pages always agree.
+ *
+ * SERVER ONLY: this file uses 'use cache' and the database, so it must never
+ * be imported by browser code ("use client" components). The types and
+ * display helpers (formatPrice, allergenText, ...) live in menu-helpers.ts,
+ * which is safe for both.
  */
 
 import { cacheLife, cacheTag } from "next/cache";
 import { createPublicClient } from "@/lib/supabase/public";
+import type { MenuItem, PriceOption, Size } from "@/lib/menu-helpers";
 
 /*
- * The three sizes on The Spot's menu board, in display order.
- */
-export type Size = "Small" | "Medium" | "Large";
-
-/*
- * PriceOption: one price a customer can choose for an item.
- *   Sized item (Fry Chicken):  { size: "Small", price: 750 }, { size: "Medium", ... }
- *   Single-price item (Pepsi): { size: null, price: 220 }   (null = no size)
- * This is NOT a new database class: it's just a handy shape for the pages,
- * built from MenuItem's price columns (decision "Option C").
- */
-export type PriceOption = {
-  size: Size | null;
-  price: number; // J$. Stored EXACTLY in the database as numeric(10,2)
-};
-
-/*
- * MenuItem: what ONE menu item looks like in our code (SDS class: MenuItem).
- * The database uses snake_case names (is_available); TypeScript code usually
- * uses camelCase (isAvailable). getMenuItems() converts between them, so the
- * rest of the app never has to think about database names.
- */
-export type MenuItem = {
-  id: number;
-  name: string;
-  description: string;
-  // Always at least 1 option. Only the sizes actually offered are included,
-  // in Small -> Medium -> Large order (Fish: just [Large]).
-  priceOptions: PriceOption[];
-  category: string; // plain text (decision), e.g. "Food"
-  // SAF-2: null = NOT CONFIRMED yet ("ask at the counter").
-  //        []   = confirmed: no allergens.
-  allergens: string[] | null;
-  isAvailable: boolean; // FR-01: false = greyed out, cannot be added (instead of stock tracking)
-  isDailySpecial: boolean; // FR-01: daily specials are highlighted
-  isMadeToOrder: boolean; // FR-01: e.g. fries. Pickup with one needs at least 15 min
-};
-
-/*
- * MenuItemRow: what one row looks like when it comes back FROM the database.
+ * MenuItemDbRow: what one row looks like when it comes back FROM the database.
  * Used only inside this file, for the conversion below.
  * Prices may be null (a size not offered, or "price" on a sized item).
  */
-type MenuItemRow = {
+type MenuItemDbRow = {
   id: number;
   name: string;
   description: string;
@@ -86,7 +51,7 @@ type MenuItemRow = {
  * Number(...) makes sure each price is a number even if it arrives as text
  * ("1200.00"), which can happen with exact numeric columns.
  */
-function toPriceOptions(row: MenuItemRow): PriceOption[] {
+function toPriceOptions(row: MenuItemDbRow): PriceOption[] {
   if (row.price !== null) {
     return [{ size: null, price: Number(row.price) }];
   }
@@ -146,7 +111,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
   }
 
   // Convert each database row (snake_case) into our MenuItem (camelCase).
-  return (data as MenuItemRow[]).map((row) => ({
+  return (data as MenuItemDbRow[]).map((row) => ({
     id: row.id,
     name: row.name,
     description: row.description,
@@ -157,54 +122,4 @@ export async function getMenuItems(): Promise<MenuItem[]> {
     isDailySpecial: row.is_daily_special,
     isMadeToOrder: row.is_made_to_order,
   }));
-}
-
-/*
- * getCategories(items)
- * Lists each category once, in the order it first appears (items are already
- * in sort_order). Example: ["Meals", "Sides", "Drinks"].
- * WHY build it from the data? Category is plain text, so if the Manager adds a
- * "Desserts" item, a "Desserts" section appears with no code change
- * (Maintainability).
- */
-export function getCategories(items: MenuItem[]): string[] {
-  // A Set keeps only unique values, in the order they were added.
-  return [...new Set(items.map((item) => item.category))];
-}
-
-/*
- * allergenText(item) -> the words shown after "Allergens:" (SAF-2).
- *   null      -> "Not confirmed yet, please ask at the counter"
- *   []        -> "None"            (confirmed: no allergens)
- *   [Fish]    -> "Fish"
- * WHY one shared function? Both the big card (food) and the compact row
- * (drinks) show allergens. Writing the rule once means they can never
- * disagree, which matters for a safety requirement.
- */
-export function allergenText(item: MenuItem): string {
-  if (item.allergens === null) return "Not confirmed yet, please ask at the counter";
-  if (item.allergens.length === 0) return "None";
-  return item.allergens.join(", ");
-}
-
-/*
- * isSinglePrice(item) -> true for items with ONE price and no sizes (e.g. Pepsi).
- * Used by the card (to show "J$220" instead of size prices) and by the Menu page
- * (decision: single-price items are shown as compact rows, not big cards).
- */
-export function isSinglePrice(item: MenuItem): boolean {
-  return item.priceOptions.length === 1 && item.priceOptions[0].size === null;
-}
-
-/*
- * formatPrice(1200) -> "J$1,200"   formatPrice(99.5) -> "J$99.50"
- * One shared function, so every price on the site looks the same.
- * Whole-dollar prices show no cents; other prices always show 2 decimal places.
- */
-export function formatPrice(price: number): string {
-  const hasCents = !Number.isInteger(price);
-  return `J$${price.toLocaleString("en-US", {
-    minimumFractionDigits: hasCents ? 2 : 0,
-    maximumFractionDigits: 2,
-  })}`;
 }

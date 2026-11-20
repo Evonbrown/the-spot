@@ -10,7 +10,7 @@
  * items. Writing the card once means they always look the same.
  */
 
-import { allergenText, formatPrice, isSinglePrice, type MenuItem } from "@/lib/menu";
+import { allergenText, formatPrice, isSinglePrice, type MenuItem } from "@/lib/menu-helpers";
 
 /*
  * MenuItemCard
