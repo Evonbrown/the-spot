@@ -39,6 +39,14 @@ Rules:
 ## Open decisions (settle before Build step 8)
 - Login with "email or student ID": the SRS allows both. For now login is EMAIL ONLY. Decide whether to add student ID login (and how customers without a student ID log in) before Build step 8.
 
+## Decisions made
+- Menu is public: anyone can browse it without logging in. Only ordering needs an account.
+- Menu item category is a plain text column (not an enum).
+- The cart lives in the browser for now; the server re-checks prices and availability at checkout (Build step 3).
+- Strict role access: each role opens only its own screen (e.g. a manager cannot open /staff).
+- Phone number is required at sign-up; minimum password length is 8.
+- Login is email only for now (see "Open decisions" for student ID login).
+
 ## Architecture (SDS 2.3: three-tier layered)
 - Presentation layer: role screens in `app/` (customer, staff, driver, manager, supervisor)
 - Application layer: server actions / route handlers in `lib/` and `app/api/`. All business rules live here, never only in the browser.
