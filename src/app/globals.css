@@ -24,6 +24,22 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/*
+ * Smooth scrolling: when you tap a link to a part of the SAME page (e.g. a
+ * menu category button, "#mixes"), the page glides there instead of jumping.
+ * Usability: a glide shows the customer where they went.
+ *
+ * Only for people who have NOT asked their phone/computer to "reduce motion"
+ * (an accessibility setting for people who get dizzy from animations).
+ * Next.js turns this off while moving between pages, so page changes stay
+ * instant (see data-scroll-behavior="smooth" in layout.tsx).
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
 body {
   background: var(--color-cream);
   color: var(--color-ink);

@@ -369,3 +369,41 @@ Two big sections ("Food", "Drinks") became **8 smaller ones**, so customers find
 ### Possible lecturer questions
 - *How did you add categories without changing the code?* The page groups items by the `category` column, so new values automatically become new sections.
 - *What decides the order of the sections?* `sort_order`: each category has its own block of numbers.
+
+---
+
+## Part 11: Sticky category bar, highlight and 4 cards per row (Build step 2)
+The Menu page is quicker to use (Usability: order in under 3 minutes): tapping a category **glides** to it, the bar **highlights the section you're looking at**, and wide screens show **4 cards per row** (still 1 per row on phones).
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/components/CategoryBar.tsx` | Presentation | **New.** A client component (`"use client"`): the sticky row of category links. Watches scrolling, highlights the current section, and scrolls the bar sideways so the active button stays visible on phones. |
+| `src/app/menu/page.tsx` | Presentation | Uses `CategoryBar`. Page width up to 1280px (`max-w-7xl`); grid `xl:grid-cols-4`. |
+| `src/app/globals.css` | Presentation | `scroll-behavior: smooth`, only if the user hasn't turned on "reduce motion". |
+| `src/app/layout.tsx` | Presentation | `data-scroll-behavior="smooth"` on `<html>`, so Next.js keeps page-to-page navigation instant. |
+
+### How the highlight works
+1. Every time the page scrolls (at most once per screen redraw, using `requestAnimationFrame`), the bar checks each section.
+2. The active section is the **last one whose top has reached the bottom of the sticky bar**.
+3. At the very bottom of the page, the **last** section is active, because a short last section (Alcohol) can never scroll up to the bar.
+4. The active button gets the filled red style and `aria-current="true"` (for screen readers).
+
+### Key concepts
+- **Server Component vs Client Component:** most of the Menu page is built on the server (fast, no JavaScript sent). Only `CategoryBar` runs in the browser, because only the browser knows where you've scrolled. The server hands it plain data (names and ids).
+- **React hooks:** `useState` holds a value that redraws the component when it changes (`activeId`). `useEffect` runs code in the browser after the component appears, e.g. adding a scroll listener, and its clean-up removes the listener. `useRef` is a handle to a real element (the bar) so we can measure it.
+- **Progressive enhancement:** the buttons are plain `<a href="#mixes">` links. If JavaScript fails, they still jump to the section; JavaScript only adds the highlight.
+- **Accessibility:** smooth scrolling is turned off for people with "reduce motion" on. Tap targets are at least 44px tall (`min-h-11`).
+- **Responsive grid:** `grid-cols-1` (phones) → `sm:grid-cols-2` (640px) → `lg:grid-cols-3` (1024px) → `xl:grid-cols-4` (1280px). "Mobile-first" means the plain class is for phones, and prefixes add columns as the screen grows.
+
+### ⚠️ Known issue: clicking a category jumps instead of gliding (revisit in the branding part)
+- **What happens:** the highlight, sticky bar and 4-per-row grid work, but tapping a category **jumps** to it instead of gliding.
+- **What we know:** the smooth-scroll rule is in `globals.css` and in the production build's CSS (`npm run build`). The running dev server first served an old stylesheet without it, but restarting the dev server and hard-refreshing did **not** fix the jump. Windows animation effects are on.
+- **Not the cause:** our category links themselves. They still jump to the right section, so the menu is fully usable.
+- **Ideas to check later:** whether the browser actually applies `scroll-behavior: smooth` to `<html>` (DevTools → Elements → `<html>` → Styles); whether Next.js's `data-scroll-behavior` handling affects in-page `#` links; a small JavaScript fallback (`window.scrollTo({ behavior: "smooth" })`) on click.
+- **Lesson so far:** if a CSS change doesn't show up, first check whether the browser actually received it before changing code.
+
+### Possible lecturer questions
+- *Why is only the bar a client component?* Only it needs the browser (scroll position). Keeping the rest on the server sends less JavaScript, so the menu loads faster (PR-1).
+- *What happens if JavaScript doesn't load?* The links still jump to each section; you just don't get the highlight.
+- *Why doesn't the highlight lag when scrolling quickly?* We do the check at most once per screen redraw (`requestAnimationFrame`), which is cheap even on low-end phones.

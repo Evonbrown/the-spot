@@ -8,6 +8,7 @@
  * In Next.js the folder name becomes the web address: app/menu/page.tsx = "/menu".
  */
 
+import CategoryBar from "@/components/CategoryBar";
 import MenuItemCard from "@/components/MenuItemCard";
 import { getCategories, getMenuItems, type MenuItem } from "@/lib/menu";
 
@@ -21,11 +22,13 @@ import { getCategories, getMenuItems, type MenuItem } from "@/lib/menu";
  * ahead of time and refresh it about every minute, instead of on every visit.
  *
  * Layout:
- *  1. A row of category buttons. Plain links to "#meals" etc., so tapping one
- *     scrolls to that section. No JavaScript needed.
+ *  1. The sticky category bar (CategoryBar), which highlights the section
+ *     you're looking at.
  *  2. One section per category, each with a grid of cards.
- *     Mobile-first: "grid-cols-1" = one column on phones; "sm:"/"lg:" add more
- *     columns on bigger screens.
+ *     Mobile-first: 1 card per row on phones, 2 on tablets ("sm:"), 3 on
+ *     laptops ("lg:") and 4 on wide screens ("xl:", 1280px and up).
+ *     The page is allowed to be wider than other pages (max-w-7xl = 1280px)
+ *     so that 4 cards per row aren't squashed.
  */
 export default async function MenuPage() {
   // Try to load the menu. If it fails, items stays null and we show a message
@@ -38,7 +41,7 @@ export default async function MenuPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 pb-12">
+    <main className="mx-auto w-full max-w-7xl px-4 pb-12">
       <h1 className="pt-6 text-3xl font-extrabold">Menu</h1>
       <p className="mt-1 text-sm text-stone-600">Prices in J$.</p>
 
@@ -76,25 +79,16 @@ function MenuSections({ items }: { items: MenuItem[] }) {
 
   return (
     <>
-      {/* Category buttons. "sticky top-14" keeps them visible just under the header. */}
-      <nav className="sticky top-14 z-[5] -mx-4 mt-4 flex gap-2 overflow-x-auto bg-cream px-4 py-3">
-        {categories.map((category) => (
-          <a
-            key={category}
-            href={`#${toId(category)}`}
-            className="min-h-11 shrink-0 rounded-full border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand hover:text-white"
-          >
-            {category}
-          </a>
-        ))}
-      </nav>
+      {/* The sticky category bar. It runs in the browser (it reacts to
+          scrolling), so we hand it the names and section ids it needs. */}
+      <CategoryBar categories={categories.map((name) => ({ name, id: toId(name) }))} />
 
       {/* One section per category */}
       {categories.map((category) => (
         // scroll-mt-32 stops the sticky header from covering the section title after jumping to it
         <section key={category} id={toId(category)} className="mt-6 scroll-mt-32">
           <h2 className="mb-3 text-xl font-bold">{category}</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items
               .filter((item) => item.category === category)
               .map((item) => (

@@ -35,7 +35,11 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
+    // data-scroll-behavior="smooth": we use smooth scrolling for jumps WITHIN a
+    // page (globals.css). This attribute tells Next.js to switch it off while
+    // moving to a DIFFERENT page, so page changes stay instant, not a slow glide.
     <html
+      data-scroll-behavior="smooth"
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
