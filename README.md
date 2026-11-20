@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Spot – Food Sales Management System
 
-## Getting Started
+COMP2140 group project (Group ACE, UWI Mona): a pre-order and pickup/delivery web app for The Spot Sports Bar & Grill.
 
-First, run the development server:
+Built with **Next.js** (App Router, TypeScript), **Tailwind CSS** and **Supabase** (Postgres database, Auth, Realtime).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## What you need
+- **Node.js 20.9 or newer** (includes `npm`)
+- A **Supabase** project (free tier is fine)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Run it on your computer
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Install the packages**
+   ```bash
+   npm install
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. **Add your Supabase keys.** Create a file called `.env.local` in the project folder:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your-project-url
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   ```
+   Find both in Supabase under **Project Settings → API**. Never commit this file (it is already in `.gitignore`).
 
-## Learn More
+3. **Set up the database.** In Supabase, open **SQL Editor** and run these files **in this order**:
+   1. `supabase/migrations/0001_profiles.sql`
+   2. `supabase/migrations/0002_menu_items.sql`
+   3. `supabase/migrations/0003_menu_item_sizes.sql`
+   4. `supabase/migrations/0004_customizations.sql`
+   5. `supabase/seed/real_menu_items.sql` (the menu)
+   6. `supabase/seed/sample_customizations.sql` (sample extras)
 
-To learn more about Next.js, take a look at the following resources:
+4. **Start the app**
+   ```bash
+   npm run dev
+   ```
+   Open <http://localhost:3000>.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+New sign-ups are **customers**. To try a staff screen, change that user's `role` in the `profiles` table (Supabase **Table Editor**) to `counter_staff`, `delivery_personnel`, `manager` or `supervisor`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Other commands
+| Command | What it does |
+|---|---|
+| `npm run build` | Builds the production version and checks for errors |
+| `npm run start` | Runs the production build (after `npm run build`) |
+| `npm run lint` | Checks the code style |
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project notes
+- `CLAUDE.md`: requirements summary (SRS/SDS), roles, statuses, build order and decisions made.
+- `LEARNING.md`: study notes for each part we built.
+- `the-spot-real-menu.md`: the real menu copied from the menu boards, with open questions for the client.
+- `studio/`: code from studio sessions (not part of the app).
