@@ -47,8 +47,9 @@ export default function CategoryBar({ categories }: { categories: CategoryLink[]
    * RULE: the active section is the LAST one whose top has scrolled up to the
    * bottom of the sticky bar. Example: once "Mixes" reaches the bar, Mixes is
    * active, even if part of "Goat & Fish" is still visible above it.
-   * SPECIAL CASE: at the very bottom of the page, the last section is active,
-   * because a short last section (e.g. Alcohol) can never reach the bar.
+   * Every section CAN reach the bar, because MenuBrowser makes the last section
+   * at least one screen tall (fix for short sections near the end, such as
+   * Energy & Sports, which used to be skipped).
    */
   useEffect(() => {
     // requestAnimationFrame = "do this just before the next screen redraw".
@@ -59,13 +60,6 @@ export default function CategoryBar({ categories }: { categories: CategoryLink[]
     function updateActive() {
       frame = 0;
       const barBottom = barRef.current?.getBoundingClientRect().bottom ?? 0;
-
-      const atBottom =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-      if (atBottom) {
-        setActiveId(categories.at(-1)?.id);
-        return;
-      }
 
       let current = categories[0]?.id;
       for (const { id } of categories) {

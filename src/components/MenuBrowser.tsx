@@ -111,8 +111,14 @@ export default function MenuBrowser({ items }: { items: MenuItem[] }) {
             const rowItems = inCategory.filter((item) => isSinglePrice(item));
 
             return (
-              // scroll-mt-32 stops the sticky header from covering the section title after jumping to it
-              <section key={id} id={id} className="mt-6 scroll-mt-32">
+              // scroll-mt-32 stops the sticky header from covering the section title after jumping to it.
+              // last:min-h-[calc(100dvh-8rem)] = the LAST section is at least one screen
+              // tall, minus the header and category bar (8rem = 128px). WHY? Without it,
+              // short sections near the end (Energy & Sports, Alcohol) could never scroll
+              // up to the bar, so the bar couldn't highlight them and tapping them
+              // stopped short. "dvh" = the visible screen height on phones, even while
+              // the browser's address bar shows or hides.
+              <section key={id} id={id} className="mt-6 scroll-mt-32 last:min-h-[calc(100dvh-8rem)]">
                 <h2 className="mb-3 text-xl font-bold">{name}</h2>
 
                 {cardItems.length > 0 && (

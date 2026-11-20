@@ -396,6 +396,12 @@ The Menu page is quicker to use (Usability: order in under 3 minutes): tapping a
 - **Accessibility:** smooth scrolling is turned off for people with "reduce motion" on. Tap targets are at least 44px tall (`min-h-11`).
 - **Responsive grid:** `grid-cols-1` (phones) → `sm:grid-cols-2` (640px) → `lg:grid-cols-3` (1024px) → `xl:grid-cols-4` (1280px). "Mobile-first" means the plain class is for phones, and prefixes add columns as the screen grows.
 
+### Fix: Energy & Sports was never highlighted
+- **Symptom:** scrolling skipped from Water & Juice straight to Alcohol, and tapping Energy & Sports highlighted Alcohol.
+- **Cause:** near the end of the page there wasn't enough content below the short sections, so the page couldn't scroll far enough for Energy & Sports to reach the bar. Our old "at the very bottom, highlight the last section" rule then picked Alcohol.
+- **Fix:** the **last section** is now at least one screen tall minus the header and bar (`last:min-h-[calc(100dvh-8rem)]` in `MenuBrowser.tsx`). Now every section can scroll up to the bar, so the special bottom rule was removed from `CategoryBar.tsx`.
+- **Key idea, `dvh`:** "dynamic viewport height", the visible screen height on phones, which changes as the browser's address bar slides in and out. `100vh` would be too tall on phones.
+
 ### ⚠️ Known issue: clicking a category jumps instead of gliding (revisit in the branding part)
 - **What happens:** the highlight, sticky bar and 4-per-row grid work, but tapping a category **jumps** to it instead of gliding.
 - **What we know:** the smooth-scroll rule is in `globals.css` and in the production build's CSS (`npm run build`). The running dev server first served an old stylesheet without it, but restarting the dev server and hard-refreshing did **not** fix the jump. Windows animation effects are on.
