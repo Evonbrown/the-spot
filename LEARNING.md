@@ -590,3 +590,62 @@ Customers can now collect items: food goes in through the options panel, drinks 
 - *Couldn't someone change the prices in their cart?* Yes, in their own browser, so the server never trusts cart prices; it recalculates from the database at checkout.
 - *What happens on a shared computer?* Log out empties the cart, so the next person starts fresh.
 - *Why does the count appear a split second after the page?* The server can't read browser storage; the browser fills in the real count right after loading (hydration).
+
+---
+
+## Part 17: The cart page (Build step 2)
+`/cart` now shows everything in the cart: each line's name, size, extras, meal note, price each, **quantity − 1 +**, **Remove**, and line total, plus a **summary** with the item count, **subtotal** (items + customizations, FR-02) and a **Checkout** button (disabled until Build step 3). This completes the "Menu → Cart" part of the under-3-minutes goal.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/components/CartView.tsx` | Presentation | **New, client.** Lines, summary, empty state, loading skeleton. |
+| `src/components/QuantityStepper.tsx` | Presentation | **New.** The shared − 1 + control (1–10), used by the panel and the cart page. |
+| `src/lib/cart.ts` | Application | New pure functions `setLineQuantity` (kept 1–10), `removeLine`, `cartSubtotal`. |
+| `src/components/CartProvider.tsx` | Presentation | Shares `changeQuantity()` and `removeFromCart()` ("Removed …" message). |
+| `src/components/ItemOptionsDialog.tsx` | Presentation | Uses `QuantityStepper` (looks the same). |
+| `src/app/cart/page.tsx` | Presentation | Page title + `CartView` (replaces the placeholder). Browser tab: "Your cart". |
+
+### Decisions
+- **"−" is disabled at 1**: removing is only done with the Remove button, so nobody removes a line by accident.
+- **Quantity or remove only**: to change size, extras or note, remove the line and add it again.
+- **No price re-check on the cart page**: the server checks prices and availability at checkout (step 3) and tells the customer what changed. One check, in the right layer (Application, on the server).
+- **Checkout button shown but disabled** until step 3.
+- **Hint in the options panel:** "Extras are added to each meal." appears under the quantity (when there are extras), because the price is (size + extras) × quantity. With quantity 2, both meals get the ticked extras.
+
+### Key concepts
+- **Avoiding the "empty flash":** the server can't see the browser's cart, so it would draw "Your cart is empty" and then the items would pop in. `useIsBrowser()` (built on `useSyncExternalStore`: the server answers `false`, the browser `true`) shows grey **skeleton** boxes until the cart can be read.
+- **One component, two places (`QuantityStepper`):** the panel and the cart page share the same control, so the 1–10 limits can't drift apart.
+- **Exact totals:** `cartSubtotal` adds every line in whole cents, the same idea as `calculateLinePrice`.
+- **Responsive layout:** phones stack the lines with the summary below; wide screens (`lg:grid-cols-3`) put the lines in 2/3 and a **sticky** summary in 1/3.
+- **Accessibility:** the lines are a `<ul>`; each stepper and Remove button names its item for screen readers ("One more Pepsi", "Remove Pepsi"); the subtotal is `aria-live`, so changes are read out.
+
+### Possible lecturer questions
+- *How is the subtotal calculated?* For each line, `(size price + extras) × quantity` with the shared function, all added in cents. The delivery fee is added at checkout.
+- *What if a price changed since the item was added?* The cart shows the saved copy; the server recalculates from the database at checkout and tells the customer.
+- *Why does the page show grey boxes for a moment?* The cart is in the browser; the server can't read it, so we show placeholders instead of a misleading "empty cart".
+
+---
+
+## ✅ Build step 2 complete: recap
+Step 2 was "Menu + cart (FR-01, FR-02)". It took Parts 6–17:
+- **6. `menu_items` table:** exact money (`numeric`), no negative prices, public read, manager-only edits (RLS + `current_user_role()`).
+- **7. Menu from the database:** cached for ~1 minute (`'use cache'`) with a cookie-free public connection (PR-1).
+- **8. Sizes:** Small/Medium/Large price columns on MenuItem, "one pricing style" rule, allergens NULL = "not confirmed" (SAF-2).
+- **9. Real menu:** 56 items from the menu boards, loaded in one all-or-nothing transaction.
+- **10. Categories:** 8 data-driven sections with `sort_order` blocks.
+- **11. Sticky category bar:** highlight of the current section; 4 cards per row on wide screens.
+- **12. Compact drink rows:** single-price items as slim rows, shared `allergenText()`.
+- **13. Search:** browser-side filtering; `menu.ts` (server only) split from `menu-helpers.ts` (browser-safe).
+- **14. `customizations` table:** sample extras, same security pattern as the menu.
+- **15. Options panel:** `<dialog>` with size, extras, meal note, quantity and a live price from `calculateLinePrice()` (in cents).
+- **16. Cart:** kept in the browser (`localStorage` + `useSyncExternalStore`), shared with React Context, one-tap drinks, header count, cleared on log out.
+- **17. Cart page:** quantity/remove, subtotal, skeleton instead of an "empty flash".
+
+**How adding to the cart flows through our three layers** (example: 2 × Fry Chicken Large + Coleslaw):
+- The Menu page's server part loads `menu_items` and `customizations` through RLS-protected reads, cached (Data → Application).
+- The customer picks options in the panel; `calculateLinePrice()` shows J$2,700 (Application rule, running in the browser).
+- `CartProvider` saves the line in `localStorage`; the header shows Cart 2 (Presentation).
+- At checkout (Build step 3), the **server** will recalculate the price from the database before accepting the order, because browser data is never trusted.
+
+**Known issues carried forward:** category tap jumps instead of gliding (revisit in the branding part); header is narrower than the menu page on wide screens (branding part).

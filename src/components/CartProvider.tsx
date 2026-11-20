@@ -2,8 +2,8 @@
  * src/components/CartProvider.tsx
  *
  * WHAT: Shares ONE cart with every component on the site (header count, Add
- *       buttons, and the cart page in Part 17), and shows the short
- *       "Added to cart" message at the bottom of the screen.
+ *       buttons, and the cart page), and shows the short "Added to cart" /
+ *       "Removed" messages at the bottom of the screen.
  *
  * LAYER: Presentation (it connects the screen to the cart rules in cart.ts and
  *        the storage in cart-store.ts).
@@ -27,7 +27,15 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { addLine, cartCount, describeLine, type CartLine, type NewCartLine } from "@/lib/cart";
+import {
+  addLine,
+  cartCount,
+  describeLine,
+  removeLine,
+  setLineQuantity,
+  type CartLine,
+  type NewCartLine,
+} from "@/lib/cart";
 import { readCart, readServerCart, subscribeToCart, writeCart } from "@/lib/cart-store";
 import type { MenuItem } from "@/lib/menu-helpers";
 
@@ -37,6 +45,8 @@ type CartContextValue = {
   count: number; // total quantity, e.g. 3
   addToCart: (line: NewCartLine) => void; // food (from the options panel)
   addSingleItem: (item: MenuItem) => void; // one-tap Add for single-price items (drinks)
+  changeQuantity: (lineId: string, quantity: number) => void; // cart page: − / +
+  removeFromCart: (lineId: string) => void; // cart page: Remove button
   clearCart: () => void; // used on log out (decision: shared campus computers)
 };
 
@@ -111,14 +121,36 @@ export default function CartProvider({ children }: { children: ReactNode }) {
     [addToCart]
   );
 
+  // changeQuantity(lineId, n): the cart page's − / + buttons (kept to 1-10).
+  const changeQuantity = useCallback((lineId: string, quantity: number) => {
+    writeCart(setLineQuantity(readCart(), lineId, quantity));
+  }, []);
+
+  // removeFromCart(lineId): the cart page's Remove button, with a message so
+  // the customer knows it worked (especially screen reader users).
+  const removeFromCart = useCallback((lineId: string) => {
+    const cart = readCart();
+    const line = cart.find((l) => l.lineId === lineId);
+    writeCart(removeLine(cart, lineId));
+    if (line) setMessage(`Removed ${describeLine(line)}`);
+  }, []);
+
   // clearCart(): empty the cart (decision: when someone logs out).
   const clearCart = useCallback(() => writeCart([]), []);
 
   // useMemo: only build a new value object when something in it changed, so
   // components using useCart() don't redraw for no reason.
   const value = useMemo(
-    () => ({ lines, count: cartCount(lines), addToCart, addSingleItem, clearCart }),
-    [lines, addToCart, addSingleItem, clearCart]
+    () => ({
+      lines,
+      count: cartCount(lines),
+      addToCart,
+      addSingleItem,
+      changeQuantity,
+      removeFromCart,
+      clearCart,
+    }),
+    [lines, addToCart, addSingleItem, changeQuantity, removeFromCart, clearCart]
   );
 
   return (

@@ -112,6 +112,31 @@ function makeLineId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
+/*
+ * setLineQuantity(cart, lineId, quantity) -> a NEW cart where that line has
+ * the new quantity, always kept between 1 and 10 (decision).
+ * (Going below 1 is not how you remove a line: use removeLine.)
+ */
+export function setLineQuantity(cart: CartLine[], lineId: string, quantity: number): CartLine[] {
+  const safe = Math.min(MAX_QUANTITY, Math.max(1, Math.round(quantity)));
+  return cart.map((line) => (line.lineId === lineId ? { ...line, quantity: safe } : line));
+}
+
+/* removeLine(cart, lineId) -> a NEW cart without that line. */
+export function removeLine(cart: CartLine[], lineId: string): CartLine[] {
+  return cart.filter((line) => line.lineId !== lineId);
+}
+
+/*
+ * cartSubtotal(cart) -> items + customizations, all lines added up (FR-02).
+ * The delivery fee is added at checkout (delivery orders only).
+ * Adds in whole cents, like calculateLinePrice, so the total is exact.
+ */
+export function cartSubtotal(cart: CartLine[]): number {
+  const cents = cart.reduce((sum, line) => sum + Math.round(lineTotal(line) * 100), 0);
+  return cents / 100;
+}
+
 /* cartCount(cart) -> total number of items, e.g. 2 Fry Chicken + 1 Pepsi = 3. */
 export function cartCount(cart: CartLine[]): number {
   return cart.reduce((sum, line) => sum + line.quantity, 0);

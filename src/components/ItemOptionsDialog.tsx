@@ -22,13 +22,13 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import QuantityStepper from "@/components/QuantityStepper";
 import {
   allergenText,
   calculateLinePrice,
   formatExtraPrice,
   formatPrice,
   MAX_NOTE_LENGTH,
-  MAX_QUANTITY,
   type Customization,
   type MenuItem,
   type Size,
@@ -267,41 +267,27 @@ export default function ItemOptionsDialog({ item, customizations, onAdd, onClose
         </div>
 
         {/* ---- Footer: quantity + Add button (always visible at the bottom) ---- */}
-        <div className="flex items-center gap-3 border-t border-stone-100 p-4">
-          {/* QUANTITY: 1 to 10 (decision). The buttons are disabled at the limits. */}
-          <div className="flex items-center gap-1" role="group" aria-label="Quantity">
+        <div className="border-t border-stone-100 p-4">
+          <div className="flex items-center gap-3">
+            {/* QUANTITY: 1 to 10 (decision), shared with the cart page. */}
+            <QuantityStepper value={quantity} onChange={setQuantity} />
+
+            {/* Disabled until a size is chosen. Shows the live line price. */}
             <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              disabled={quantity <= 1}
-              aria-label="One less"
-              className="size-11 rounded-full border border-stone-300 text-xl font-bold disabled:opacity-40"
+              type="submit"
+              disabled={linePrice === null}
+              className="min-h-12 flex-1 rounded-xl bg-brand px-4 font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
             >
-              −
-            </button>
-            {/* aria-live: screen readers announce the new number */}
-            <span aria-live="polite" className="w-8 text-center text-lg font-bold">
-              {quantity}
-            </span>
-            <button
-              type="button"
-              onClick={() => setQuantity((q) => Math.min(MAX_QUANTITY, q + 1))}
-              disabled={quantity >= MAX_QUANTITY}
-              aria-label="One more"
-              className="size-11 rounded-full border border-stone-300 text-xl font-bold disabled:opacity-40"
-            >
-              +
+              {linePrice === null ? "Choose a size" : `Add to cart · ${formatPrice(linePrice)}`}
             </button>
           </div>
 
-          {/* Disabled until a size is chosen. Shows the live line price. */}
-          <button
-            type="submit"
-            disabled={linePrice === null}
-            className="min-h-12 flex-1 rounded-xl bg-brand px-4 font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
-          >
-            {linePrice === null ? "Choose a size" : `Add to cart · ${formatPrice(linePrice)}`}
-          </button>
+          {/* HINT: the price is (size + extras) × quantity, so with quantity 2,
+              each of the 2 meals gets the ticked extras. Saying it here avoids
+              surprise at the total. Only shown when there are extras to tick. */}
+          {groups.length > 0 && (
+            <p className="mt-2 text-xs text-stone-500">Extras are added to each meal.</p>
+          )}
         </div>
       </form>
     </dialog>
