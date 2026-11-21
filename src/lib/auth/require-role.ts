@@ -22,11 +22,23 @@ import { redirect } from "next/navigation";
 import { getCurrentProfile, type Profile } from "@/lib/auth/get-profile";
 import type { UserRole } from "@/lib/auth/roles";
 
-export async function requireRole(allowedRoles: UserRole[]): Promise<Profile> {
+/*
+ * options.returnTo: where to come back to after logging in, e.g. "/checkout".
+ * It's added to the login address (/login?next=/checkout), so a customer who
+ * was sent to log in during checkout lands back on checkout afterwards.
+ */
+export async function requireRole(
+  allowedRoles: UserRole[],
+  options: { returnTo?: string } = {}
+): Promise<Profile> {
   const profile = await getCurrentProfile();
 
   // Authentication: WHO are you? Not logged in -> go and log in.
-  if (!profile) redirect("/login");
+  if (!profile) {
+    redirect(
+      options.returnTo ? `/login?next=${encodeURIComponent(options.returnTo)}` : "/login"
+    );
+  }
 
   // Authorization: are you ALLOWED here? Wrong role -> the "no access" page.
   // (Strict for now: each role may only open its own screen.)

@@ -15,37 +15,20 @@
  *
  * DECISIONS: a line can only change quantity (1-10, "−" disabled at 1) or be
  * removed; to change size/extras/note, remove it and add it again. Prices are
- * NOT re-checked here: the server re-checks everything at checkout (step 3).
+ * NOT re-checked here: the server re-checks everything when the order is placed.
+ * (The grey loading placeholder uses useIsBrowser from browser-hooks.ts:
+ * the server can't see the cart, so it would otherwise flash "empty".)
  *
  * "use client" = it runs in the browser (the cart lives in the browser).
  */
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
 import { useCart } from "@/components/CartProvider";
 import QuantityStepper from "@/components/QuantityStepper";
+import { useIsBrowser } from "@/lib/browser-hooks";
 import { cartSubtotal, lineTotal, type CartLine } from "@/lib/cart";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
-
-/*
- * useIsBrowser() -> false while the server builds the page (and during the
- * browser's first "hydration" drawing), true after that.
- * WHY? The server can't see the cart (it's in the browser's storage), so it
- * would draw "Your cart is empty" and then, a moment later, your items would
- * pop in: a confusing flash. Instead we show a grey placeholder until we're in
- * the browser and can actually read the cart.
- * (It uses the same useSyncExternalStore idea as CartProvider: the "server"
- * answer is false and the "browser" answer is true.)
- */
-const noSubscribe = () => () => {};
-function useIsBrowser(): boolean {
-  return useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false
-  );
-}
 
 export default function CartView() {
   const isBrowser = useIsBrowser();
@@ -114,15 +97,13 @@ export default function CartView() {
           Delivery fee (delivery orders only) is added at checkout, where prices are confirmed.
         </p>
 
-        {/* Decision: shown but disabled until checkout is built (Build step 3). */}
-        <button
-          type="button"
-          disabled
-          className="mt-4 min-h-12 w-full rounded-xl bg-brand font-bold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+        {/* Go to checkout (Build step 3). Logging in is required there. */}
+        <Link
+          href="/checkout"
+          className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-brand font-bold text-white hover:bg-brand-dark"
         >
           Checkout
-        </button>
-        <p className="mt-2 text-center text-xs text-stone-500">Checkout comes in Build step 3.</p>
+        </Link>
 
         <Link
           href="/menu"

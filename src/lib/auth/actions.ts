@@ -17,7 +17,8 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ROLE_HOME, type UserRole } from "@/lib/auth/roles";
+import type { UserRole } from "@/lib/auth/roles";
+import { pathAfterLogin } from "@/lib/auth/safe-next";
 
 /*
  * AuthFormState: what an action sends back to the form.
@@ -119,9 +120,10 @@ export async function signUp(
     return { message: "Account created! Check your email to confirm it, then log in." };
   }
 
-  // redirect() sends the browser to the Home page. (It works by "throwing", so no
-  // code after it runs.)
-  redirect("/");
+  // redirect() sends the browser on. (It works by "throwing", so no code after
+  // it runs.) If they came from checkout (?next=/checkout), go back there.
+  // New accounts are always customers. Same shared rule as logIn below.
+  redirect(pathAfterLogin("customer", formData.get("next")));
 }
 
 /*
@@ -159,7 +161,13 @@ export async function logIn(
     .single();
 
   const role = profile?.role as UserRole | undefined;
-  redirect(role ? ROLE_HOME[role] : "/");
+
+  // A CUSTOMER who was sent here from checkout (?next=/checkout) goes back
+  // there; staff always go to their own screen (strict role screens).
+  // pathAfterLogin is the SAME rule RedirectIfLoggedIn uses, so the two can
+  // never disagree (that disagreement sent customers to Home). It also only
+  // allows addresses inside our own site (no "open redirect").
+  redirect(role ? pathAfterLogin(role, formData.get("next")) : "/");
 }
 
 /*

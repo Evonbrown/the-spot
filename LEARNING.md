@@ -748,3 +748,55 @@ Supabase gives us **two keys**:
 - *What does the secret key do, and where is it?* It skips RLS. It lives only on the server (`.env.local`, Vercel settings), never in browser code or on GitHub.
 - *What stops two orders from one double tap?* `client_request_id` is unique; the second attempt returns the first order's ID.
 - *Why copy the price into `order_items`?* So changing a menu price tomorrow doesn't change what yesterday's customer paid.
+
+## Part 20: The checkout page (no submitting yet)
+`/checkout` lets a logged-in customer choose **pickup or delivery** (and where), **when** (as soon as possible, or a time later today), and **Lynk or Cash**, and shows the order and the **total** (items + extras + delivery fee). "Place order" is connected in Part 21. Logged-out visitors are sent to log in and then **come straight back** to checkout.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/app/checkout/page.tsx` | Presentation | **New.** Customers only (`requireRole(["customer"], { returnTo: "/checkout" })`); loads phone, delivery locations, made-to-order item ids. |
+| `src/components/CheckoutForm.tsx` | Presentation | **New, client.** The choices, the order summary, the total, what's still missing. |
+| `src/lib/order-rules.ts` | Application | **New.** FR-01 time rules in **Jamaica time**: lead times, opening hours, earliest time, 15-minute slots, and `checkRequestedTime()` for the server (Part 21). |
+| `src/lib/browser-hooks.ts` | Presentation | **New.** `useIsBrowser()` (moved from CartView) and `useNow()` (a clock that ticks every 30 s). |
+| `src/lib/auth/safe-next.ts` | Application | **New.** `safeNextPath()`: only allows "come back to" paths inside our site. `pathAfterLogin()`: the ONE rule for where a logged-in user goes (customer + next -> next, otherwise their role's screen). |
+| `src/components/RedirectIfLoggedIn.tsx`, `src/app/login/page.tsx`, `src/app/signup/page.tsx` | Presentation | An already logged-in visitor is sent on with `pathAfterLogin()` too (the page hands `?next=` over as `searchParams`). |
+| `require-role.ts`, `actions.ts`, `LoginForm.tsx`, `SignUpForm.tsx` | Application / Presentation | Support `?next=/checkout` so customers return to checkout after logging in or signing up. The forms read it with `useNextParam()` (in `browser-hooks.ts`, built on Next.js's `useSearchParams()`). |
+| `src/components/CartView.tsx` | Presentation | The Checkout button now goes to `/checkout`. |
+
+### The FR-01 time rules (`order-rules.ts`)
+| Situation | Lead time |
+|---|---|
+| Pickup | 0 (straight away) |
+| Pickup with a made-to-order item (fries) | 15 min |
+| Delivery (with or without fries) | 20 min (the larger rule wins) |
+
+- **Earliest time** = (now, or 11:00 a.m. if earlier: the kitchen starts at opening) + lead time. Example: delivery ordered at 9:30 a.m. → 11:20 a.m.
+- **Later today:** every 15 minutes from the first slot after the earliest time, up to 7:00 p.m.
+- **Closed:** if even the earliest time is after 7:00 p.m., no orders until tomorrow (same day only).
+
+### Key concepts
+- **Time zones:** Vercel's servers use UTC; phones can be set to any zone. Jamaica is always **UTC−5** (no daylight saving), so the rules shift every time into Jamaica time before comparing. `Intl.DateTimeFormat` with `timeZone: "America/Jamaica"` shows times correctly on any device.
+- **One set of rules, two users:** the page uses `order-rules.ts` to **offer** only allowed times; the server (Part 21) uses the **same** functions to **check** them, because the browser can be tampered with.
+- **A ticking clock (`useNow`):** the offered times move on by themselves if the page stays open. A chosen time that becomes too soon is simply un-chosen.
+- **Open redirect protection:** `/login?next=…` only accepts paths inside our site, so a trick link like `/login?next=https://evil.example` can't send people to a fake site after logging in.
+- **No pre-chosen answers for important choices:** pickup/delivery and payment start empty (like sizes), so nobody orders the wrong way by accident; "As soon as possible" is pre-chosen because it's what most people want.
+- **Show what's missing:** instead of a silently disabled button, the summary lists what still needs choosing.
+
+### Fix: after logging in, customers landed on Home instead of checkout
+- **Symptom:** `/login?next=%2Fcheckout` was correct, but after logging in you went to the Home page. Staff logins looked fine.
+- **How we found it:** we drove a real Chrome with a test script, used the real Checkout link, and recorded what the login form sends. The form DID send `next=/checkout` (React renames it `_1_next` while sending; the server turns it back into `next`). So the form was fine; the problem came AFTER a successful login.
+- **Cause: two pieces of code disagreed about where to go.**
+  1. The `logIn` action said: customer + `next` -> go to `/checkout`.
+  2. `RedirectIfLoggedIn` (on the login page) said: logged in -> go to your role's home, and a customer's home is `/`.
+  After logging in, the cookies change, so Next.js refreshes the pages it still has loaded, including the login page it keeps alive in the background (Next.js 16 keeps recent pages ready for the Back button). That refreshed login page now saw a logged-in customer, and its "go to `/`" won.
+  Staff never noticed, because for them both pieces said the same thing (e.g. `/staff`).
+- **Fix:** one shared rule, `pathAfterLogin(role, next)` in `src/lib/auth/safe-next.ts`. The `logIn` and `signUp` actions and `RedirectIfLoggedIn` all use it (the page hands `?next=` to RedirectIfLoggedIn as `searchParams`). Now every path says `/checkout`.
+- **Also tidied:** the forms read `?next=` with Next.js's `useSearchParams()` (part of the router, so it always knows the current address), inside `<Suspense>` with a plain grey box as the placeholder (never a second copy of the form).
+- **Lesson:** if two places make the same decision ("where does this user go?"), put the rule in ONE function and call it from both. Otherwise they drift apart and the one that runs last wins. And test with a check that shows what was actually sent, instead of guessing.
+
+### Possible lecturer questions
+- *How do you stop a customer choosing 10:00 a.m. or 8:00 p.m.?* The page only offers allowed times, and the server checks again with the same rules (Part 21).
+- *What happens if I order fries for pickup?* The earliest time moves 15 minutes later; for delivery it's 20 minutes either way.
+- *Why Jamaica time in code instead of the computer's time?* The server runs on UTC; using the computer's time would make the shop "open" at the wrong hours.
+- *What if I'm logged out when I tap Checkout?* You're sent to log in (or sign up) and then returned to checkout; the address is checked so it can only send you somewhere on our site.

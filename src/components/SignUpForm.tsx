@@ -13,6 +13,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { useNextParam } from "@/lib/browser-hooks";
 import { signUp, type AuthFormState } from "@/lib/auth/actions";
 
 // Shared look for every text box. text-base (16px) stops iPhones from zooming in on tap.
@@ -31,9 +32,15 @@ const initialState: AuthFormState = {};
  */
 export default function SignUpForm() {
   const [state, formAction, pending] = useActionState(signUp, initialState);
+  // Where to go after signing up (e.g. back to checkout), from the address bar.
+  const next = useNextParam();
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {/* Hidden field: where to go after signing up (e.g. back to checkout).
+          The server checks it again with safeNextPath. */}
+      {next && <input type="hidden" name="next" value={next} />}
+
       {/* The browser checks below ("required", type="email", minLength) are only
           for convenience. The server checks everything again. */}
       <label className="block text-sm font-semibold">
@@ -109,7 +116,10 @@ export default function SignUpForm() {
 
       <p className="text-center text-sm">
         Already have an account?{" "}
-        <Link href="/login" className="font-semibold text-brand underline">
+        <Link
+          href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+          className="font-semibold text-brand underline"
+        >
           Log in
         </Link>
       </p>

@@ -13,6 +13,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { useNextParam } from "@/lib/browser-hooks";
 import { logIn, type AuthFormState } from "@/lib/auth/actions";
 
 // text-base (16px) stops iPhones from zooming in when you tap the box.
@@ -21,11 +22,20 @@ const inputClass =
 
 const initialState: AuthFormState = {};
 
+/*
+ * next = where to go after logging in (e.g. "/checkout" from
+ * /login?next=%2Fcheckout), read from the address bar by useNextParam and
+ * sent along as a hidden form field. The server checks it again (safeNextPath).
+ */
 export default function LoginForm() {
   const [state, formAction, pending] = useActionState(logIn, initialState);
+  const next = useNextParam();
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {/* Hidden field: tells the server where to send you after logging in. */}
+      {next && <input type="hidden" name="next" value={next} />}
+
       {/* Email only for now. The SRS also mentions "email or student ID" (still to decide). */}
       <label className="block text-sm font-semibold">
         Email
@@ -66,7 +76,12 @@ export default function LoginForm() {
 
       <p className="text-center text-sm">
         New to The Spot?{" "}
-        <Link href="/signup" className="font-semibold text-brand underline">
+        {/* Keep "next" when switching to sign up, so new customers also
+            land back on checkout. */}
+        <Link
+          href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"}
+          className="font-semibold text-brand underline"
+        >
           Create an account
         </Link>
       </p>
