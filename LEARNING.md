@@ -1032,3 +1032,51 @@ When a **pickup** order's next step is Completed, the button is **"Hand over ord
 - *What if staff hand over the wrong order?* They must type the customer's Order ID; a different number is blocked.
 - *How do you know who took the cash?* `payments.paid_by` and `paid_at`, saved in the same transaction as the COMPLETED status.
 - *Why isn't a Lynk order marked paid when it's handed over?* FR-02: the Supervisor verifies Lynk payments. The counter can't see whether the money really arrived.
+
+## Step 28: Full status rules + Abandoned (FR-05 SR-5.3 / SR-5.5)
+The status rules are now **complete and enforced twice**: by the server (with a clear message for each mistake) and by the **database** (a trigger, so nothing can get around them).
+- **Finished orders are locked:** Completed, Cancelled and Abandoned never change again.
+- **Forward only, one step at a time:** going backwards, skipping a step, or a status from the other path (e.g. "Being delivered" for a pickup order) is refused, each with its own message.
+- **Cancel** is allowed from any status that isn't finished.
+- **Abandoned:** pickup orders only, only from Ready for pickup, and only **20 minutes or more** after it became Ready for pickup (the time comes from `order_status_history`).
+- On the staff details page: **"Ready since 2:15 p.m."**, a hint "You can mark it Abandoned from 2:36 p.m.", and from that time a **"Mark Abandoned"** button (with "Are you sure?") that appears by itself, without refreshing.
+
+### Messages staff can see
+| Mistake | Message |
+|---|---|
+| Finished order | "Order #1004 is already Completed. Finished orders can't change." |
+| Backwards | "Order #1004 can't go back from Ready for pickup to In progress. Statuses only move forward." |
+| Skip | "You can't skip steps. The next step for order #1004 is In progress." |
+| Wrong path | "Pickup orders don't go to Being delivered." |
+| Abandon a delivery | "Only pickup orders can be marked Abandoned." |
+| Abandon too soon | "Order #1004 has been ready for 12 minutes. It can be marked Abandoned from 2:36 p.m. (20 minutes after it was ready)." |
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0011_status_rules.sql` | Data | **New.** (1) Counter staff may READ `order_status_history`. (2) The trigger `orders_enforce_status_rules` + function `enforce_order_status_rules()`: checks EVERY status change (same rules as the server). |
+| `supabase/tests/0011_status_rules_checks.sql` | Data | **New.** 8 checks: 19 min refused, exactly 20 min allowed, delivery can't be abandoned, only from Ready, skip refused, backwards refused, finished locked, staff can read history (customers only their own). |
+| `supabase/tests/0010_pickup_handover_checks.sql` | Data | Block 2 now walks the order to Ready first (the trigger refuses the old skip to Completed). |
+| `src/lib/order-status.ts` | Application | **Added** `statusSteps()` (each path as a list), `ABANDON_AFTER_MINUTES = 20`; `nextStatus()` now reads from `statusSteps()`. |
+| `src/lib/orders/status-rules.ts` | Application | `checkStatusChange(order, newStatus, now)`: the full rules. **Added** `abandonAllowedFrom()`, `formatAbandonTime()`, `findReadyForPickupAt()`. |
+| `src/lib/orders/status-actions.ts` | Application | Reads the order's history fresh, passes the "ready" time and the server's clock into the rule. |
+| `src/lib/orders/get-order.ts` | Application | `getOrderForStaff` also returns `readyForPickupAt`. |
+| `src/components/StatusButtons.tsx` | Presentation (browser) | The hint, the "Mark Abandoned" button with confirmation, and the timer that shows the button when 20 minutes pass. |
+| `src/app/staff/orders/[id]/page.tsx` | Presentation | "Ready since …"; passes the ready time to the buttons. |
+
+### Key concepts
+- **State machine:** an order can only be in one status at a time, and only certain moves are allowed. We store each path as a LIST (`statusSteps`) and compare positions: lower = backwards, two or more ahead = a skip, exactly one ahead = allowed.
+- **Trigger:** a function Postgres runs automatically BEFORE every change of `orders.status`. If it raises an error, the change (and everything else in the same transaction, like the history row) is cancelled. It runs even for our secret key and the SQL Editor; that's why it's a real safety net.
+- **Defence in depth:** button (a hint) → server action (decides, friendly message) → trigger (final lock). Each layer would still stop a bad change if the one before it had a bug.
+- **Boundaries:** "20 minutes OR MORE" is written `>=` (TypeScript: `now < allowedFrom` → refuse; SQL: `now() < ready + 20 min` → refuse). So 19:59 is refused and 20:00 is allowed. We tested both sides.
+- **`now()` is fixed inside a transaction:** Postgres gives the transaction's START time every time you call `now()`. That's why our tests can set "exactly 20 minutes ago" and get an exact result.
+- **Time is passed in, not read inside:** `checkStatusChange(order, status, now)` takes the time as an input, so it can be tested by "pretending" it's 19 or 20 minutes later. The server passes its OWN clock, never a time from the browser.
+- **Same first render on server and browser:** the button's clock starts at 0 and a timer sets the real time just after. If the server drew "Mark Abandoned" and the browser didn't (or the other way round), React would report a mismatch.
+- **Display rounding:** allowed from 2:35:40 → we show "2:36 p.m." (rounded UP), so the time we show is always true.
+
+### Possible lecturer questions
+- *What if someone sends a request to abandon an order after 5 minutes?* The server refuses it ("has been ready for 5 minutes…"); even if that check were skipped, the database trigger refuses it.
+- *Where does the 20 minutes count from?* From the `changed_at` of the READY_FOR_PICKUP row in `order_status_history`, written when staff pressed "Mark Ready for pickup".
+- *Why can't delivery orders be abandoned?* The food is with the driver, not waiting at the counter; SR-5.5 is about pickup orders that nobody collects.
+- *Can a manager "undo" a cancelled order in the SQL Editor?* No: the trigger runs for everyone, so finished orders stay finished.
+- *What happens to the money of an abandoned order?* Unpaid cash stays UNPAID, so FR-06 doesn't count it as revenue. A verified Lynk payment would need a refund (Supervisor, Build step 7).

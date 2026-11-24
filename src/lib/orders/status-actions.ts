@@ -8,6 +8,9 @@
  *       Step 27: completing a PICKUP order also checks the Order ID the
  *       customer gives (SAF-1) and, for unpaid cash, "cash received"; the
  *       cash payment then becomes PAID in the same transaction (FR-06).
+ *       Step 28: the full rules (forward only, finished orders locked,
+ *       Abandoned only 20+ minutes after Ready for pickup). The database
+ *       trigger (migration 0011) checks them again when saving.
  *
  * LAYER: Application layer. The buttons (Presentation) only call it; the
  *        rule is checkStatusChange() (status-rules.ts); the save is the
@@ -30,7 +33,9 @@ import {
   cashToCollect,
   checkPickupHandover,
   checkStatusChange,
+  findReadyForPickupAt,
   needsPickupHandover,
+  type OrderForStatusCheck,
   type PaymentForHandover,
   type PickupHandover,
 } from "@/lib/orders/status-rules";
@@ -94,11 +99,14 @@ export async function updateOrderStatus(
 
   // ---- 3. FRESH ORDER + THE RULE ----
   // Read with the staff member's OWN login (RLS: counter staff may read
-  // orders, 0007), not the secret key: least privilege.
+  // orders, 0007, and their history, 0011), not the secret key: least
+  // privilege. The history tells us WHEN it became Ready for pickup, for the
+  // 20-minute Abandoned rule (Step 28). It is read fresh here: the time the
+  // browser shows is never trusted.
   const supabase = await createClient();
   const { data: order, error: readError } = await supabase
     .from("orders")
-    .select("status, fulfilment")
+    .select("status, fulfilment, order_status_history ( status, changed_at )")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -108,11 +116,22 @@ export async function updateOrderStatus(
   }
   if (!order) return { ok: false, error: "Order not found." };
 
-  const current = order as { status: OrderStatus; fulfilment: Fulfilment };
+  const row = order as {
+    status: OrderStatus;
+    fulfilment: Fulfilment;
+    order_status_history: { status: OrderStatus; changed_at: string }[] | null;
+  };
+  const current: OrderForStatusCheck = {
+    id: orderId,
+    status: row.status,
+    fulfilment: row.fulfilment,
+    readyForPickupAt: findReadyForPickupAt(row.order_status_history),
+  };
   if (current.status !== rawSeenStatus) return { ok: false, error: SOMEONE_ELSE };
 
-  // THE rule (Step 26 minimum; Step 28 adds the full rules in this function).
-  const ruleError = checkStatusChange(current, rawNewStatus);
+  // THE rule (Step 28: forward only, finished locked, Abandoned after 20 min).
+  // Date.now() = the SERVER's clock, never a time sent by the browser.
+  const ruleError = checkStatusChange(current, rawNewStatus, Date.now());
   if (ruleError) return { ok: false, error: ruleError };
 
   // ---- 4. PICKUP HANDOVER (Step 27, SAF-1 + FR-06) ----
@@ -161,6 +180,10 @@ export async function updateOrderStatus(
     p_cash_received: cashReceived,
   });
 
+  // If the database trigger (0011) refused it, we land here too. That should
+  // only happen if the rules above and the trigger ever disagree (e.g. at
+  // exactly 20:00 the two clocks differ by a fraction of a second): the
+  // database has the final say, and staff can simply try again.
   if (saveError) {
     console.error("updateOrderStatus: change_order_status failed:", saveError.message);
     return { ok: false, error: "We couldn't save the change. Please try again." };

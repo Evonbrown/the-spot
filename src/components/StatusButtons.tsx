@@ -7,8 +7,10 @@
  *           which opens the handover form (Step 27): type the Order ID the
  *           customer gives you, and for unpaid cash tick "Cash received (J$X)";
  *         - "Cancel order", which asks "Are you sure?" first;
+ *         - Step 28: for a PICKUP order that is Ready for pickup, a hint
+ *           "You can mark it Abandoned from 2:36 p.m.", and from that time a
+ *           "Mark Abandoned" button (with "Are you sure?") (SR-5.5);
  *         - nothing but "This order is finished" once it is finished.
- *       No Abandoned button yet (Step 28).
  *
  * LAYER: Presentation. The next step comes from nextStatus() (order-status.ts)
  *        and the handover rule from checkPickupHandover() (status-rules.ts),
@@ -29,14 +31,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useLayoutEffect, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useState, useTransition } from "react";
 import { formatPrice } from "@/lib/menu-helpers";
-import { isFinalStatus, nextStatus, STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import {
+  ABANDON_AFTER_MINUTES,
+  isFinalStatus,
+  nextStatus,
+  STATUS_LABELS,
+  type OrderStatus,
+} from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
 import { updateOrderStatus } from "@/lib/orders/status-actions";
 import {
+  abandonAllowedFrom,
   cashToCollect,
   checkPickupHandover,
+  formatAbandonTime,
   needsPickupHandover,
   type PaymentForHandover,
 } from "@/lib/orders/status-rules";
@@ -46,9 +56,10 @@ type Props = {
   status: OrderStatus; // the status staff can SEE right now
   fulfilment: Fulfilment;
   payment: PaymentForHandover | null; // for the handover form (Step 27)
+  readyForPickupAt: number | null; // when it became Ready for pickup (Step 28)
 };
 
-export default function StatusButtons({ orderId, status, fulfilment, payment }: Props) {
+export default function StatusButtons({ orderId, status, fulfilment, payment, readyForPickupAt }: Props) {
   const router = useRouter();
   // isPending = true while the server works: buttons show "Saving…" and are
   // disabled, so a double tap can't send two changes.
@@ -60,6 +71,33 @@ export default function StatusButtons({ orderId, status, fulfilment, payment }: 
   const [handingOver, setHandingOver] = useState(false);
   const [typedOrderId, setTypedOrderId] = useState("");
   const [cashReceived, setCashReceived] = useState(false);
+  // Step 28: true = showing "Mark order #1004 as Abandoned? Yes / Keep order".
+  const [confirmingAbandon, setConfirmingAbandon] = useState(false);
+
+  /*
+   * Step 28: the time from which "Mark Abandoned" is allowed, or null if this
+   * order can't be abandoned (not pickup, not ready). Same helper as the
+   * server, so the page and the server agree.
+   */
+  const abandonFrom = abandonAllowedFrom({ status, fulfilment, readyForPickupAt });
+
+  /*
+   * "now" for the Abandoned button. It starts at 0 ("not yet") so the page
+   * looks exactly the same when the server first draws it and when the
+   * browser takes over (if the two showed different buttons, React would
+   * complain). The timer below then sets the real time:
+   *   - straight away if the 20 minutes have already passed;
+   *   - otherwise exactly when they pass, so the button APPEARS BY ITSELF
+   *     while staff have the page open (no refresh needed).
+   */
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    if (abandonFrom === null) return;
+    const wait = Math.max(0, abandonFrom - Date.now());
+    const timer = setTimeout(() => setNow(Date.now()), wait + 250); // +250 ms: be safely past the time
+    return () => clearTimeout(timer); // page left / time changed: stop the old timer
+  }, [abandonFrom]);
+  const canAbandon = abandonFrom !== null && now >= abandonFrom;
 
   /*
    * Start clean when staff leave this page. (In this Next.js version a page
@@ -73,6 +111,7 @@ export default function StatusButtons({ orderId, status, fulfilment, payment }: 
       setTypedOrderId("");
       setCashReceived(false);
       setConfirmingCancel(false);
+      setConfirmingAbandon(false);
       setError(null);
     };
   }, []);
@@ -84,7 +123,7 @@ export default function StatusButtons({ orderId, status, fulfilment, payment }: 
 
   const next = nextStatus(status, fulfilment);
   // Step 27: completing a PICKUP order goes through the handover form.
-  const isHandover = next !== null && needsPickupHandover({ status, fulfilment }, next);
+  const isHandover = next !== null && needsPickupHandover({ fulfilment }, next);
   const collectCash = cashToCollect(payment);
 
   /*
@@ -104,6 +143,7 @@ export default function StatusButtons({ orderId, status, fulfilment, payment }: 
         } else {
           setError(result.error);
           setConfirmingCancel(false);
+          setConfirmingAbandon(false);
           router.refresh(); // show the latest status (e.g. someone else changed it)
         }
       } catch {
@@ -154,6 +194,7 @@ export default function StatusButtons({ orderId, status, fulfilment, payment }: 
           onClick={() => {
             setHandingOver(true);
             setConfirmingCancel(false);
+            setConfirmingAbandon(false);
             setError(null);
           }}
           disabled={isPending}
@@ -236,8 +277,58 @@ export default function StatusButtons({ orderId, status, fulfilment, payment }: 
         </form>
       )}
 
+      {/* ---- Step 28 (SR-5.5): Abandoned, pickup only, 20+ min after Ready ---- */}
+      {abandonFrom !== null &&
+        !handingOver &&
+        !confirmingCancel &&
+        (!canAbandon ? (
+          // Not yet: tell staff WHEN they can (decision: show the hint).
+          <p className="rounded-lg bg-stone-100 p-3 text-sm text-stone-700">
+            Customer not here? You can mark it Abandoned from {formatAbandonTime(abandonFrom)} (
+            {ABANDON_AFTER_MINUTES} minutes after it was ready).
+          </p>
+        ) : !confirmingAbandon ? (
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmingAbandon(true);
+              setError(null);
+            }}
+            disabled={isPending}
+            className="min-h-11 w-full rounded-xl border border-stone-400 bg-white px-4 font-semibold text-stone-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Mark Abandoned
+          </button>
+        ) : (
+          <div role="group" aria-label="Confirm abandoned" className="rounded-xl bg-stone-100 p-3">
+            <p className="font-semibold text-stone-900">
+              Mark order #{orderId} as Abandoned? Only do this if the customer didn&apos;t come for it. This
+              can&apos;t be undone.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => change("ABANDONED")}
+                disabled={isPending}
+                className="min-h-11 rounded-lg bg-stone-800 px-3 font-bold text-white hover:bg-stone-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isPending ? "Saving…" : "Yes, abandoned"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingAbandon(false)}
+                disabled={isPending}
+                className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 font-semibold hover:bg-stone-50 disabled:opacity-50"
+              >
+                Keep order
+              </button>
+            </div>
+          </div>
+        ))}
+
       {/* ---- Cancel, with a second "are you sure?" step ---- */}
       {!handingOver &&
+        !confirmingAbandon &&
         (!confirmingCancel ? (
           <button
             type="button"

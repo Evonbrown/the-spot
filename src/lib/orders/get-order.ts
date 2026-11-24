@@ -31,6 +31,7 @@ import "server-only";
 import type { Size } from "@/lib/menu-helpers";
 import type { OrderStatus, PaymentMethod, PaymentStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
+import { findReadyForPickupAt } from "@/lib/orders/status-rules";
 import { createClient } from "@/lib/supabase/server";
 
 /* One extra on an order item, as saved when the order was placed. */
@@ -77,6 +78,10 @@ export type OrderDetails = {
  */
 export type StaffOrderDetails = OrderDetails & {
   customer: { name: string | null; phone: string | null } | null;
+  // Step 28: when it became Ready for pickup (milliseconds), from
+  // order_status_history, or null. Used for "Ready since 2:15 p.m." and the
+  // 20-minute Abandoned rule.
+  readyForPickupAt: number | null;
 };
 
 // ---- What comes back FROM the database (snake_case) -------------------------
@@ -110,6 +115,7 @@ type OrderRow = {
 };
 type StaffOrderRow = OrderRow & {
   profiles: { full_name: string | null; phone: string | null } | null;
+  order_status_history: { status: OrderStatus; changed_at: string }[] | null;
 };
 
 /*
@@ -211,6 +217,8 @@ export async function getOrderForCustomer(
  * the right "no access" screen.
  * "profiles ( full_name, phone )" follows orders.customer_id to the customer's
  * profile (allowed for counter staff by migration 0008).
+ * "order_status_history ( status, changed_at )" = every status it has had
+ * and when (counter staff may read it from migration 0011, Step 28).
  * THROWS if the database can't be reached.
  */
 export async function getOrderForStaff(idText: string): Promise<StaffOrderDetails | null> {
@@ -220,7 +228,7 @@ export async function getOrderForStaff(idText: string): Promise<StaffOrderDetail
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("orders")
-    .select(`${ORDER_COLUMNS}, profiles ( full_name, phone )`)
+    .select(`${ORDER_COLUMNS}, profiles ( full_name, phone ), order_status_history ( status, changed_at )`)
     .eq("id", id)
     .maybeSingle();
 
@@ -234,5 +242,6 @@ export async function getOrderForStaff(idText: string): Promise<StaffOrderDetail
   return {
     ...toOrderDetails(row),
     customer: row.profiles ? { name: row.profiles.full_name, phone: row.profiles.phone } : null,
+    readyForPickupAt: findReadyForPickupAt(row.order_status_history),
   };
 }

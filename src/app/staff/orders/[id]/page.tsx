@@ -9,6 +9,8 @@
  *       (StatusButtons). Step 27: completing a PICKUP order needs the
  *       customer's Order ID (SAF-1) and, for cash, "cash received" (PAID).
  *       Staff also see the payment status (Unpaid / Paid).
+ *       Step 28: "Ready since" while it waits at the counter, and "Mark
+ *       Abandoned" once 20 minutes have passed (pickup only, SR-5.5).
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        getOrderForStaff (Application layer) reads through RLS (Data layer,
@@ -134,6 +136,7 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
           status={order.status}
           fulfilment={order.fulfilment}
           payment={order.payment}
+          readyForPickupAt={order.readyForPickupAt}
         />
       </section>
 
@@ -172,6 +175,15 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
             <dt className="text-sm text-stone-500">Ordered</dt>
             <dd className="font-semibold">{formatJamaicaDateTime(order.createdAt)}</dd>
           </div>
+          {/* Step 28: while it waits at the counter, show since when (from
+              order_status_history). The 20-minute Abandoned wait counts from
+              this time. */}
+          {order.status === "READY_FOR_PICKUP" && order.readyForPickupAt !== null && (
+            <div>
+              <dt className="text-sm text-stone-500">Ready since</dt>
+              <dd className="font-semibold">{formatJamaicaTime(order.readyForPickupAt)}</dd>
+            </div>
+          )}
           <div>
             {/* Step 27 (decision): staff see the payment STATUS too (customers
                 don't): it confirms cash was recorded, and shows whether a Lynk

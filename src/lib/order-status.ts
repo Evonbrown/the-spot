@@ -13,8 +13,9 @@
  *   Pickup:   PENDING -> IN_PROGRESS -> READY_FOR_PICKUP -> COMPLETED
  *   Delivery: PENDING -> IN_PROGRESS -> READY_FOR_PICKUP -> BEING_DELIVERED -> COMPLETED
  *   End states also allowed: CANCELLED, ABANDONED.
- * This file names the statuses and the normal next step (nextStatus). The
- * server's CHECK lives in src/lib/orders/status-rules.ts (full rules: Step 28).
+ * This file names the statuses, the normal path (statusSteps, nextStatus) and
+ * the 20-minute Abandoned wait. The server's CHECK lives in
+ * src/lib/orders/status-rules.ts, and the database's in migration 0011.
  */
 
 import type { Fulfilment } from "@/lib/order-rules";
@@ -51,28 +52,40 @@ export function isFinalStatus(status: OrderStatus): boolean {
 }
 
 /*
- * nextStatus(current, fulfilment) -> the ONE next step, or null if finished.
+ * statusSteps(fulfilment) -> the normal PATH an order walks, in order.
  *   Pickup:   PENDING -> IN_PROGRESS -> READY_FOR_PICKUP -> COMPLETED
  *   Delivery: PENDING -> IN_PROGRESS -> READY_FOR_PICKUP -> BEING_DELIVERED -> COMPLETED
+ * Step 28: the server rule (status-rules.ts) compares POSITIONS on this path:
+ * a lower position = "going backwards", two or more ahead = "skipping a step".
+ * CANCELLED and ABANDONED are not on the path: they are exits, with their
+ * own rules. (The database trigger in migration 0011 has the same two lists.)
+ */
+export function statusSteps(fulfilment: Fulfilment): OrderStatus[] {
+  return fulfilment === "DELIVERY"
+    ? ["PENDING", "IN_PROGRESS", "READY_FOR_PICKUP", "BEING_DELIVERED", "COMPLETED"]
+    : ["PENDING", "IN_PROGRESS", "READY_FOR_PICKUP", "COMPLETED"];
+}
+
+/*
+ * nextStatus(current, fulfilment) -> the ONE next step on the path, or null
+ * if there is none (the order is finished).
  * Used by BOTH the status buttons (to show only the next step) and the server
  * (status-rules.ts, to allow only the next step), so they can never disagree.
- * (Cancel and, later, Abandoned are extra choices, not "the next step".)
+ * (Cancel and Abandoned are extra choices, not "the next step".)
  */
 export function nextStatus(current: OrderStatus, fulfilment: Fulfilment): OrderStatus | null {
-  switch (current) {
-    case "PENDING":
-      return "IN_PROGRESS";
-    case "IN_PROGRESS":
-      return "READY_FOR_PICKUP";
-    case "READY_FOR_PICKUP":
-      // The one place pickup and delivery differ.
-      return fulfilment === "DELIVERY" ? "BEING_DELIVERED" : "COMPLETED";
-    case "BEING_DELIVERED":
-      return "COMPLETED";
-    default:
-      return null; // COMPLETED, CANCELLED, ABANDONED: finished
-  }
+  const steps = statusSteps(fulfilment);
+  const position = steps.indexOf(current); // -1 = not on the path (Cancelled, Abandoned)
+  if (position === -1) return null;
+  return steps[position + 1] ?? null; // nothing after COMPLETED -> null
 }
+
+/*
+ * SR-5.5: a PICKUP order may be marked ABANDONED only this many minutes (or
+ * more) after it became READY_FOR_PICKUP. The database trigger (migration
+ * 0011) uses the same number: if you ever change it, change it in BOTH places.
+ */
+export const ABANDON_AFTER_MINUTES = 20;
 
 /* What each status is called on screen, e.g. READY_FOR_PICKUP -> "Ready for pickup". */
 export const STATUS_LABELS: Record<OrderStatus, string> = {

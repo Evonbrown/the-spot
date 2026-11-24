@@ -67,7 +67,10 @@ rollback;
 -- -----------------------------------------------------------------------------
 -- BLOCK 2: a LYNK payment can NOT be marked paid this way (Supervisor only,
 --          Build step 7). The whole change is undone.
--- EXPECT: an ERROR: "Order ... has no unpaid cash payment to mark as paid."
+-- EXPECT: two "changed = true" results, then an ERROR:
+--         "Order ... has no unpaid cash payment to mark as paid."
+-- (Step 28: the order first walks to READY_FOR_PICKUP, because the status
+--  trigger from migration 0011 now refuses skipping straight to COMPLETED.)
 -- -----------------------------------------------------------------------------
 begin;
 
@@ -84,7 +87,19 @@ select public.create_order(
 
 select public.change_order_status(
   (select id from public.orders where client_request_id = '10101010-1010-4010-8010-101010101011'),
-  'PENDING', 'COMPLETED',
+  'PENDING', 'IN_PROGRESS',
+  (select id from public.profiles where role = 'counter_staff' order by created_at limit 1)
+) as changed;
+
+select public.change_order_status(
+  (select id from public.orders where client_request_id = '10101010-1010-4010-8010-101010101011'),
+  'IN_PROGRESS', 'READY_FOR_PICKUP',
+  (select id from public.profiles where role = 'counter_staff' order by created_at limit 1)
+) as changed;
+
+select public.change_order_status(
+  (select id from public.orders where client_request_id = '10101010-1010-4010-8010-101010101011'),
+  'READY_FOR_PICKUP', 'COMPLETED',
   (select id from public.profiles where role = 'counter_staff' order by created_at limit 1),
   true
 );
