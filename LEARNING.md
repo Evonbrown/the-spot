@@ -1267,3 +1267,44 @@ Each delivery card on `/driver` now has the driver's **one next step**:
 - *What if the driver forgets to collect the cash?* They can't complete a cash order without ticking "Cash received", and the database refuses it too (block 5). That keeps FR-06 revenue correct.
 - *What if the driver's phone dies on the way?* Counter staff use "Complete delivery (backup)" with the same Order ID and cash checks, recorded under their name.
 - *How do you know how long a delivery took?* `deliveries.picked_up_at` and `delivered_at` (SR-4.3).
+
+## Step 34: Daily Sales Summary (FR-06 SR-6.1 / SR-6.2 / SR-6.3 / SR-6.10, AC-6.1 to AC-6.3)
+`/manager` now shows the **Daily Sales Summary** for a chosen business day (default today, Jamaica time); counter staff see **today only** at `/staff/sales` ("Today's sales" link on the queue).
+
+### What it shows (and the rules)
+| Figure | Rule |
+|---|---|
+| Orders (paid) | orders placed that day whose payment is **PAID** and that are **not** Cancelled / Abandoned |
+| Gross sales | total of those orders (items + delivery fees); delivery fees shown as "of which" |
+| Refunds | **J$0** until Step 38 (refunds table); the place is marked "STEP 38" in the SQL |
+| Net sales | gross sales − refunds |
+| By payment type | Lynk / Cash: transactions, amount, refunds, net, **% of net sales** |
+| Warning | red box if the payment-type totals ≠ net sales (AC-6.3) |
+| For information | Cancelled, Abandoned, and **Not counted** (unpaid, e.g. Lynk waiting for the Supervisor) |
+
+A **business day** = midnight to midnight **Jamaica time**; an order belongs to the day it was **placed**.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0016_sales_summary.sql` | Data | **New.** Index on `orders.created_at`; `daily_sales_summary(p_day)`: all figures in one query, with the role + date check inside (manager any day, counter staff today only, others refused). |
+| `supabase/tests/0016_sales_summary_checks.sql` | Data | **New.** 6 checks with KNOWN numbers (test day 15 Jan 2020): the full summary, the mismatch warning, counter staff past day refused / today OK, driver (and customer) refused, empty day. |
+| `src/lib/reports/get-sales-summary.ts` | Application (server only) | **New.** `jamaicaToday()`, `parseReportDay()` (valid, not future), `getSalesSummary()` (calls the function with the person's own login). |
+| `src/components/SalesSummary.tsx` | Presentation | **New.** Figures, breakdown table, warning, info lines (shared by both pages). |
+| `src/app/manager/page.tsx` | Presentation | Replaces the placeholder: date picker (plain GET form, `?date=`) + summary. |
+| `src/app/staff/sales/page.tsx` | Presentation | **New.** Counter staff, today only. |
+| `src/components/StaffQueue.tsx` | Presentation | "Today's sales" link. |
+
+### Key concepts
+- **Let the database do the maths:** exact money (`numeric`), one fast query, no rounding errors from JavaScript. The browser only shows the result.
+- **Index:** like a book's index: Postgres jumps straight to one day's orders instead of reading every order (the 3-second target).
+- **A function that returns only totals (least privilege):** the Manager gets the numbers without being able to read every order and customer. It runs as its owner (`security definer`) but checks the role FIRST.
+- **The access rule lives in TWO places:** the page (who may open it) and the function (which day each role may see). Typing `?date=yesterday` on `/staff/sales` changes nothing.
+- **A check that really checks (AC-6.3):** the breakdown is added up from `payments.amount`, net sales from `orders.total`. If a payment record doesn't match its order, the two differ and the warning appears.
+- **Time zones:** `timestamp '2020-01-15 00:00' at time zone 'America/Jamaica'` = "midnight on that day IN Jamaica" as an exact moment; the server itself runs on UTC.
+
+### Possible lecturer questions
+- *Why doesn't a cancelled order count even if it was paid?* FR-06: revenue excludes cancelled and abandoned orders (a paid-then-cancelled order needs a refund, Step 38).
+- *Why is Lynk often 0?* Lynk payments only count once the Supervisor has verified them (PAID); until then they're in "Not counted".
+- *Can counter staff see yesterday's sales?* No: there's no date picker for them, and the database function refuses any day but today for counter staff (tested in block 3).
+- *How is % of net sales worked out?* Each type's net ÷ total net × 100, rounded to 1 decimal; on a day with no sales it's 0 (no division by zero).

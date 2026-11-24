@@ -48,6 +48,13 @@ export default function StaffQueue({ orders, loadError, pastOrders, pastLoadErro
       <p className="mt-1 text-sm text-stone-600">
         Active orders, oldest first. New orders appear at the bottom. Tap an order for details.
       </p>
+      {/* Step 34 (FR-06 SR-6.10): counter staff may see TODAY's sales only. */}
+      <Link
+        href="/staff/sales"
+        className="mt-2 inline-flex min-h-11 items-center font-semibold text-brand underline"
+      >
+        Today&apos;s sales
+      </Link>
 
       {loadError && (
         <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-900">
