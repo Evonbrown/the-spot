@@ -941,3 +941,29 @@ The confirmation page now has a **"How to pay"** box (FR-02):
 - *How does a new order reach the staff screen within 3 seconds?* Realtime sends a message when the `orders` row is inserted; the queue re-reads the active orders immediately.
 - *Could a customer use Realtime to spy on other orders?* No. Realtime applies the same RLS rules, so they'd only hear about their own.
 - *Why can't staff just update the status in the database?* The grants only allow SELECT. Status changes go through the server, where the forward-only rule lives.
+
+## Step 25: Order details for counter staff (FR-03, SR-3.2 / AC-1)
+Tapping an order in the queue opens **`/staff/orders/1004`**: the Order ID and status, the **customer's name and phone** (tap to call), every **item** (size, extras with prices, meal note, line total), **pickup or delivery** location, **ready by**, **order time**, **payment method** and **totals**. View only: status buttons come in Step 26. It updates live if the order changes.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0008_staff_order_details.sql` | Data | **New.** Counter staff may read the profiles of **customers who have an order** (not other staff), and all payments. Read-only. |
+| `supabase/tests/0008_staff_order_details_checks.sql` | Data | **New.** 4 checks: staff see name/phone/payment; staff can't see other staff or customers without orders; customers still only see themselves; other roles see nothing. |
+| `src/lib/orders/get-order.ts` | Application (server only) | **Reorganised.** One shared query + one conversion; `getOrderForCustomer()` (Part 22) and the new `getOrderForStaff()` (adds the customer's name and phone). |
+| `src/app/staff/orders/[id]/page.tsx` | Presentation | **New.** The details page (counter staff only, "Order not found" for a bad number). |
+| `src/components/OrderLiveRefresh.tsx` | Presentation (browser) | **New.** The Realtime "listen, then refresh" logic and the "● Live" label, shared by the queue and the details page. Can listen to ONE order (`filter: id=eq.1004`). |
+| `src/components/StatusBadge.tsx` | Presentation | **New.** The coloured status label, the same on every screen. |
+| `src/components/StaffQueue.tsx` | Presentation | Cards are now links to the details. Uses `OrderLiveRefresh`, so it no longer needs `"use client"` (drawn on the server). |
+
+### Key concepts
+- **Least privilege in RLS:** staff need customers' phone numbers, but not other staff accounts or people who never ordered. The rule is "counter staff AND the profile is a customer AND that customer has an order".
+- **Why there's no loop between rules:** the profiles rule looks at orders; the orders rule calls `current_user_role()`, which reads profiles as its owner ("security definer") and skips RLS.
+- **Don't repeat yourself:** the customer page and the staff page read an order with the SAME query and conversion, so they can't drift apart. The same goes for `OrderLiveRefresh` and `StatusBadge`.
+- **Server vs browser components:** once the live part moved into its own small browser component, the queue list could be drawn on the server, which means less JavaScript sent to staff phones.
+- **Privacy by design:** a customer's phone number is only loaded when staff open THAT order, not for every order in the queue.
+
+### Possible lecturer questions
+- *Can counter staff see the manager's phone number?* No. They can only read profiles of customers who have placed an order.
+- *Why a separate page instead of a pop-up?* Easier on phones, Back returns to the queue, and phone numbers are only sent when needed.
+- *What happens if the status changes while I'm looking at an order?* The page listens to that order through Realtime and refreshes itself.

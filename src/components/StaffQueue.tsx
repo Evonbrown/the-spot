@@ -5,116 +5,45 @@
  *       order, oldest at the top, so new orders appear at the BOTTOM as
  *       Pending. Each card: Order ID, items (size, extras, meal notes), order
  *       time, "Ready by", pickup or delivery (and where), and status.
+ *       Tapping a card opens that order's full details (Step 25).
  *
  * LAYER: Presentation. The orders come from getActiveOrders()
  *        (src/lib/orders/get-queue.ts, Application layer), loaded on the server.
  *
- * HOW "LIVE" WORKS (FR-01: new orders in the staff queue within 3 seconds):
- *   1. This component SUBSCRIBES to Supabase Realtime: "tell me whenever a
- *      row in the orders table is added or changed".
- *   2. When a message arrives, it calls router.refresh(): Next.js asks the
- *      server to build the /staff page again, which reads the queue fresh
- *      and sends the new cards. Nothing else on the page is reset.
- *   WHY refresh instead of using the message itself? The message only holds
- *   the orders ROW, not its items. Re-reading means the queue is always built
- *   ONE way, so the first load and the live updates can never disagree.
- *   Realtime checks RLS for each listener, so only counter staff hear about
- *   every order (migration 0007).
+ * LIVE (FR-01: new orders in the staff queue within 3 seconds): handled by
+ * <OrderLiveRefresh> (Realtime -> router.refresh(), see that file). When it
+ * refreshes, the server builds this list again with the latest orders.
+ *
+ * No "use client" since Step 25: the live part moved into OrderLiveRefresh,
+ * so this list is drawn on the server and arrives as plain HTML.
  *
  * NOT HERE YET: status buttons and "Past Orders" (Step 26); the server's
  * status rules (Step 28).
- *
- * "use client" = it runs in the browser, because the Realtime connection
- * lives in the browser.
  */
-"use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import Link from "next/link";
+import OrderLiveRefresh from "@/components/OrderLiveRefresh";
+import StatusBadge from "@/components/StatusBadge";
 import { formatJamaicaTime } from "@/lib/order-rules";
 import type { QueueOrder } from "@/lib/orders/get-queue";
-import { createClient } from "@/lib/supabase/client";
 
 type Props = {
   orders: QueueOrder[];
   loadError: boolean; // true = the server couldn't read the queue
 };
 
-// Connection state for the small label at the top.
-type LiveState = "connecting" | "live" | "reconnecting";
-
-// A colour per status, so staff can scan the queue at a glance.
-// (Colour is never the ONLY signal: the status is always written out too.)
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  PENDING: "bg-amber-100 text-amber-900",
-  IN_PROGRESS: "bg-sky-100 text-sky-900",
-  READY_FOR_PICKUP: "bg-green-100 text-green-900",
-  BEING_DELIVERED: "bg-violet-100 text-violet-900",
-  COMPLETED: "bg-stone-100 text-stone-700",
-  CANCELLED: "bg-stone-100 text-stone-700",
-  ABANDONED: "bg-stone-100 text-stone-700",
-};
-
 export default function StaffQueue({ orders, loadError }: Props) {
-  const router = useRouter();
-  const [live, setLive] = useState<LiveState>("connecting");
-
-  /*
-   * The Realtime subscription.
-   * Runs when the queue appears. The function it returns ("cleanup") runs
-   * when the queue disappears: it closes the connection, so a hidden or
-   * closed page doesn't keep listening. (In this Next.js version a page you
-   * leave is HIDDEN, not removed; the cleanup still runs then, and the
-   * subscription starts again when you come back.)
-   */
-  useEffect(() => {
-    const supabase = createClient();
-
-    const channel = supabase
-      .channel("staff-queue")
-      .on(
-        "postgres_changes",
-        // "*" = any change: INSERT (new order) or UPDATE (e.g. status).
-        { event: "*", schema: "public", table: "orders" },
-        () => router.refresh()
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setLive("live");
-          // Also re-read once on (re)connecting: catches any order placed
-          // while we were disconnected or the page was hidden.
-          router.refresh();
-        } else {
-          // CHANNEL_ERROR, TIMED_OUT or CLOSED: Supabase keeps retrying.
-          setLive("reconnecting");
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
-
   return (
     <section aria-labelledby="queue-title">
       <div className="flex items-center justify-between gap-3 pt-6">
         <h1 id="queue-title" className="text-3xl font-extrabold">
           Order queue
         </h1>
-        {/* role="status": screen readers announce when this changes. */}
-        <p role="status" className="text-sm font-semibold">
-          {live === "live" ? (
-            <span className="text-green-700">● Live</span>
-          ) : live === "connecting" ? (
-            <span className="text-stone-500">Connecting…</span>
-          ) : (
-            <span className="text-red-700">Reconnecting… (refresh if this stays)</span>
-          )}
-        </p>
+        {/* Listens to ALL orders; shows "● Live". */}
+        <OrderLiveRefresh channelName="staff-queue" />
       </div>
       <p className="mt-1 text-sm text-stone-600">
-        Active orders, oldest first. New orders appear at the bottom.
+        Active orders, oldest first. New orders appear at the bottom. Tap an order for details.
       </p>
 
       {loadError && (
@@ -142,7 +71,8 @@ export default function StaffQueue({ orders, loadError }: Props) {
 }
 
 /*
- * OrderCard: one order in the queue.
+ * OrderCard: one order in the queue. The WHOLE card is a link to the order's
+ * details (Step 25): a big tap target, easy on a phone.
  * PHONES (staff use smartphones): everything stacked; the Order ID and status
  * stay on the top line so they're seen first.
  */
@@ -152,12 +82,14 @@ function OrderCard({ order }: { order: QueueOrder }) {
     : formatJamaicaTime(order.requestedTime);
 
   return (
-    <article className="rounded-xl bg-white p-4 shadow-sm" aria-label={`Order ${order.id}`}>
+    <Link
+      href={`/staff/orders/${order.id}`}
+      aria-label={`Order ${order.id}, view details`}
+      className="block rounded-xl bg-white p-4 shadow-sm ring-brand hover:ring-2 focus-visible:ring-2"
+    >
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-2xl font-extrabold">#{order.id}</h2>
-        <span className={`shrink-0 rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLES[order.status]}`}>
-          {STATUS_LABELS[order.status]}
-        </span>
+        <StatusBadge status={order.status} />
       </div>
 
       {/* Order time, Ready by, pickup or delivery. */}
@@ -199,6 +131,6 @@ function OrderCard({ order }: { order: QueueOrder }) {
           </li>
         ))}
       </ul>
-    </article>
+    </Link>
   );
 }
