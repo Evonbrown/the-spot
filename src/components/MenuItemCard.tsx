@@ -74,6 +74,14 @@ export default function MenuItemCard({
       <h3 className="text-lg font-bold">{item.name}</h3>
       <p className="text-sm text-stone-600">{item.description}</p>
 
+      {/* SAF-2 (Step 40a): ingredients, when the Manager has filled them in. */}
+      {item.ingredients && (
+        <p className="text-xs text-stone-700">
+          <span className="font-semibold">Ingredients: </span>
+          {item.ingredients}
+        </p>
+      )}
+
       {/* SAF-2: allergens are always shown.
           null = not confirmed yet -> tell the customer to ask (never say "None"
           unless the allergens have actually been confirmed as none). */}

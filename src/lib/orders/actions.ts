@@ -168,6 +168,7 @@ type MenuRow = {
   price_large: number | string | null;
   is_available: boolean;
   is_made_to_order: boolean;
+  is_archived: boolean; // Step 40a: removed from the menu by the Manager
 };
 type ExtraRow = { id: number; name: string; extra_price: number | string; is_available: boolean };
 type LocationRow = { id: number; name: string; delivery_fee: number | string; is_active: boolean };
@@ -250,7 +251,7 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
   const [menuResult, extrasResult, locationResult] = await Promise.all([
     db
       .from("menu_items")
-      .select("id, name, price, price_small, price_medium, price_large, is_available, is_made_to_order")
+      .select("id, name, price, price_small, price_medium, price_large, is_available, is_made_to_order, is_archived")
       .in("id", itemIds),
     extraIds.length > 0
       ? db.from("customizations").select("id, name, extra_price, is_available").in("id", extraIds)
@@ -287,7 +288,9 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
     const label = line.size ? `${line.name} (${line.size})` : line.name;
     const row = menuById.get(line.itemId);
 
-    if (!row) {
+    // Step 40a: an item the Manager REMOVED (archived) counts as gone too,
+    // even if it's still in an old cart in the browser.
+    if (!row || row.is_archived) {
       changes.push(`${label} is no longer on the menu.`);
       continue;
     }

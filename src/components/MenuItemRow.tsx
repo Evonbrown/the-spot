@@ -56,6 +56,8 @@ export default function MenuItemRow({ item, canOrder = true }: { item: MenuItem;
           )}
         </p>
         {item.description && <p className="text-xs text-stone-600">{item.description}</p>}
+        {/* SAF-2 (Step 40a): ingredients, when filled in */}
+        {item.ingredients && <p className="text-xs text-stone-600">Ingredients: {item.ingredients}</p>}
         {/* SAF-2: allergens, same wording as the cards (shared allergenText) */}
         <p className="text-xs text-stone-600">Allergens: {allergenText(item)}</p>
       </div>

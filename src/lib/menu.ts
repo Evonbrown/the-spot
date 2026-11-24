@@ -29,6 +29,7 @@ type MenuItemDbRow = {
   id: number;
   name: string;
   description: string;
+  ingredients: string;
   price: number | string | null;
   price_small: number | string | null;
   price_medium: number | string | null;
@@ -96,11 +97,14 @@ export async function getMenuItems(): Promise<MenuItem[]> {
   const supabase = createPublicClient();
 
   // SELECT the columns we need, ordered by sort_order (then id, as a tie-break).
+  // Step 40a: REMOVED items (is_archived) are left out: they only stay in the
+  // table for old orders and reports.
   const { data, error } = await supabase
     .from("menu_items")
     .select(
-      "id, name, description, price, price_small, price_medium, price_large, category, allergens, is_available, is_daily_special, is_made_to_order"
+      "id, name, description, ingredients, price, price_small, price_medium, price_large, category, allergens, is_available, is_daily_special, is_made_to_order"
     )
+    .eq("is_archived", false)
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 
@@ -115,6 +119,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
     id: row.id,
     name: row.name,
     description: row.description,
+    ingredients: row.ingredients ?? "",
     priceOptions: toPriceOptions(row),
     category: row.category,
     allergens: row.allergens,

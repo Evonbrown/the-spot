@@ -34,6 +34,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import CloseoutPanel from "@/components/CloseoutPanel";
 import DailyTotals from "@/components/DailyTotals";
+import ManagerNav from "@/components/ManagerNav";
 import ItemVolumeReport from "@/components/ItemVolumeReport";
 import SalesSummary from "@/components/SalesSummary";
 import { requireRole } from "@/lib/auth/require-role";
@@ -144,7 +145,9 @@ async function ManagerScreen({ searchParams }: { searchParams: SearchParams }) {
 
   return (
     <>
-      <h1 className="pt-6 text-3xl font-extrabold">Sales reports</h1>
+      {/* Step 40a: switch between Reports and the Menu screen. */}
+      <ManagerNav current="reports" />
+      <h1 className="pt-4 text-3xl font-extrabold">Sales reports</h1>
 
       <DateControls start={start} end={end} today={today} filters={filters} />
       <p className="mt-2 text-sm text-stone-600">

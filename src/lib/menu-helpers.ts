@@ -40,6 +40,7 @@ export type MenuItem = {
   id: number;
   name: string;
   description: string;
+  ingredients: string; // SAF-2 (Step 40a): what's in it; "" = not given (not shown)
   // Always at least 1 option. Only the sizes actually offered are included,
   // in Small -> Medium -> Large order (Fish: just [Large]).
   priceOptions: PriceOption[];

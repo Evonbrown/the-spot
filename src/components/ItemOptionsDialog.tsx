@@ -147,6 +147,13 @@ export default function ItemOptionsDialog({ item, customizations, onAdd, onClose
               {item.name}
             </h2>
             {item.description && <p className="text-sm text-stone-600">{item.description}</p>}
+            {/* SAF-2 (Step 40a): ingredients, when filled in */}
+            {item.ingredients && (
+              <p className="mt-1 text-xs text-stone-700">
+                <span className="font-semibold">Ingredients: </span>
+                {item.ingredients}
+              </p>
+            )}
             {/* SAF-2: allergens shown again right before ordering */}
             <p className="mt-1 text-xs text-stone-700">
               <span className="font-semibold">Allergens: </span>

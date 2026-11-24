@@ -1589,3 +1589,37 @@ The rules (server action AND database): **only the Supervisor**; only a **paid**
 - *What if staff close the laptop and open it 40 minutes later?* The screen's timer sees 40 minutes and logs out; even before it runs, the server sees the old `last_active_at` and refuses every page and action.
 - *Why don't the automatic refreshes count as activity?* Then an abandoned screen would never log out.
 - *Are customers logged out too?* No (decision): only staff roles.
+
+## Step 40a: The Manager's Menu screen (SRS QA-3 Maintainability; SAF-2)
+The Manager can now change the menu **without a developer**. A "Reports | Menu" switch sits at the top of the Manager's pages.
+- **`/manager/menu`:** every item by category: name, price(s), labels (Daily special, Made to order, Allergens not confirmed), and:
+  - **Available: on/off** (e.g. Oxtail on Thursdays, Stew Peas on Wednesdays);
+  - **Edit**; **Remove** ("Remove X from the menu? Yes, remove / Cancel").
+- **Add item / Edit item:** name, description, **ingredients** (new, shown on the menu), category (from the list or a **new** one), **one price OR Small / Medium / Large** (empty size = not offered), **allergens** (Not confirmed / None (confirmed) / Contains ...), made-to-order, daily special, available. New items go at the end of their category.
+- **Remove:** never ordered -> **deleted**. Ordered before -> **hidden** ("removed"), because old orders and reports point at it; it appears under **Removed items** with **Restore**.
+- **Customers see changes straight away**, and checkout refuses a removed item ("no longer on the menu"), even from an old cart.
+- **Two Managers editing the same item:** the second save says "Someone else changed this item since you opened it" instead of overwriting.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0026_menu_management.sql` (+ tests) | Data | **New.** `menu_items.ingredients`, `menu_items.is_archived`, tidiness CHECKs (name, category, texts, max 15 allergens). No new permissions (the Manager could already write; RLS 0002). |
+| `src/lib/menu-admin/menu-rules.ts` | Application | **New.** `readMenuItemForm` (all form checks), `parsePrice`, `parseAllergens`, `toDbRow`. |
+| `src/lib/menu-admin/menu-actions.ts` | Application | **New.** `saveMenuItem`, `setMenuItemAvailable`, `removeMenuItem` (delete or hide), `restoreMenuItem`; each ends with `updateTag("menu")`. |
+| `src/lib/menu-admin/get-menu-admin.ts` | Application (server only) | **New.** Every item incl. removed ones, NOT cached. |
+| `src/app/manager/menu/page.tsx`, `new/page.tsx`, `[id]/page.tsx` | Presentation | **New.** The list, Add, Edit. |
+| `src/components/MenuAdminList.tsx`, `MenuItemForm.tsx`, `ManagerNav.tsx` | Presentation | **New.** The list with buttons, the form, the Reports / Menu switch. |
+| `src/lib/menu.ts`, `menu-helpers.ts`, `MenuItemCard.tsx`, `MenuItemRow.tsx`, `ItemOptionsDialog.tsx` | Application / Presentation | Customer menu: leaves out removed items; shows **Ingredients** when filled in. |
+| `src/lib/orders/actions.ts` | Application | Checkout refuses removed items. |
+
+### Key concepts
+- **Maintainability (QA-3):** data the business changes often (prices, specials) lives in the database with a screen to edit it, not in the code.
+- **Soft delete ("archive"):** instead of deleting a row other rows depend on, mark it hidden. The foreign key on order_items makes the database refuse a real delete (error 23503), which is our signal to hide it instead.
+- **Cache invalidation:** the customer menu is cached for speed (PR-1). `updateTag("menu")` throws the saved copy away right after a change, so speed and freshness both hold.
+- **Optimistic concurrency:** the form remembers the item's `updated_at`; the save only happens if it's still the same ("someone else changed it").
+- **Defence in depth:** the form checks (browser), the Server Action checks (Manager + values), RLS (only the Manager may write) and CHECK rules (values) all agree.
+
+### Possible lecturer questions
+- *How does the Manager change a price without a developer?* Menu -> Edit -> change the price -> Save. Customers see it on their next visit; old carts are re-checked at checkout.
+- *What happens to old orders if an item is removed?* It's only hidden (block 4: the database refuses to delete an ordered item), so old orders, receipts and reports still show it.
+- *Can counter staff change the menu?* No: RLS refuses (block 2), and the screen is Manager only.
