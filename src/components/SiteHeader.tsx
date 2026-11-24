@@ -32,10 +32,11 @@ const linkClass = "rounded-md px-2 py-2 hover:bg-brand-dark";
  *
  * "sticky top-0" keeps the bar visible while the user scrolls.
  * Tapping "The Spot" goes home.
+ * "print:hidden" (Step 37): the header never appears on printed reports.
  */
 export default function SiteHeader() {
   return (
-    <header className="sticky top-0 z-10 bg-brand text-white shadow">
+    <header className="sticky top-0 z-10 bg-brand text-white shadow print:hidden">
       <nav className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-2 px-4">
         <Link href="/" className="text-xl font-extrabold tracking-tight">
           The Spot

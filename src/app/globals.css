@@ -45,3 +45,23 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+/*
+ * PRINTING (Step 37, FR-06 SR-6.9): printed reports (and "Save as PDF") use
+ * plain white paper, black text, no shadows, and a small page margin. A
+ * report box is kept on one page where it fits (break-inside: avoid), so a
+ * table isn't cut in half between two pages.
+ */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+  section {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}

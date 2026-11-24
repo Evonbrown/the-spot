@@ -179,7 +179,7 @@ export type SalesRange = {
  * daysBetween("2026-11-01", "2026-11-03") -> 2. Plain dates, so we count in
  * UTC: no time-zone or summer-time surprises.
  */
-function daysBetween(start: string, end: string): number {
+export function daysBetween(start: string, end: string): number {
   return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000);
 }
 

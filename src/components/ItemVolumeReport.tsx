@@ -109,7 +109,11 @@ export default function ItemVolumeReport({ start, end, categories, filters, resu
   );
 }
 
-function ItemTable({
+/*
+ * ItemTable: the table + Total line + check line. Exported so the print page
+ * (Step 37, /manager/print) shows EXACTLY the same table.
+ */
+export function ItemTable({
   lines,
   showCheck,
   itemsShouldTotal,

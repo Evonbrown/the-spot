@@ -10,9 +10,12 @@
  *           with category, order type and sort filters.
  *       Default: today (Jamaica time). The choice is in the address, so it
  *       can be bookmarked and Back works. The old "?date=" (Step 34) still
- *       works. Export / print is Step 37.
+ *       works.
  *       - Step 36: for ONE day, the "Daily closeout" box (count, approve and
  *         lock, reopen, history, limit); for a range, a "Closed" column.
+ *       - Step 37 (SR-6.9): a "Print and export" box with links to the print
+ *         page (/manager/print, "Save as PDF" from there) and the CSV
+ *         downloads (/manager/export/...) for what's on screen.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        the reports are worked out by the database (Data layer, 0016/0017),
@@ -149,6 +152,9 @@ async function ManagerScreen({ searchParams }: { searchParams: SearchParams }) {
         midnight to midnight, Jamaica time · by the time each order was placed.
       </p>
 
+      {/* Step 37: print / CSV links (only when the dates are valid). */}
+      {!("error" in parsed) && <ExportLinks start={start} end={end} filters={filters} />}
+
       <div className="mt-4 flex flex-col gap-4">
         {"error" in parsed ? (
           <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
@@ -263,6 +269,57 @@ function DateControls({
         <span className="inline-flex min-h-11 items-center text-stone-500">Up to {MAX_RANGE_DAYS} days.</span>
       </p>
     </>
+  );
+}
+
+/*
+ * ExportLinks (Step 37, FR-06 SR-6.9): "Print" opens the print-friendly page
+ * (where "Save as PDF" is one choice of printer); "CSV" downloads the file.
+ *   - ONE day: the Daily Closeout report;
+ *   - a RANGE: the daily totals;
+ *   - always: the item volume report WITH the chosen filters.
+ * The CSV links are plain <a> links (not <Link>): they download a file, they
+ * don't open a page, so Next.js shouldn't try to load them in advance.
+ */
+function ExportLinks({ start, end, filters }: { start: string; end: string; filters: ItemFilters }) {
+  const isRange = start !== end;
+  const dates = isRange ? `from=${start}&to=${end}` : `date=${start}`;
+  const itemQuery = new URLSearchParams({ from: start, to: end });
+  if (filters.category) itemQuery.set("category", filters.category);
+  if (filters.fulfilment) itemQuery.set("type", filters.fulfilment);
+  if (filters.sort !== "quantity") itemQuery.set("sort", filters.sort);
+
+  const lines = [
+    isRange
+      ? { name: "Daily totals", print: `/manager/print?report=range&${dates}`, csv: `/manager/export/daily-totals?${dates}` }
+      : { name: "Daily Closeout report", print: `/manager/print?report=closeout&${dates}`, csv: `/manager/export/closeout?${dates}` },
+    {
+      name: "Item volume (with your filters)",
+      print: `/manager/print?report=items&${itemQuery.toString()}`,
+      csv: `/manager/export/items?${itemQuery.toString()}`,
+    },
+  ];
+  const link = "inline-flex min-h-11 items-center font-semibold text-brand underline";
+
+  return (
+    <section aria-labelledby="export-title" className="mt-4 rounded-xl bg-white p-4 shadow-sm">
+      <h2 id="export-title" className="text-base font-bold">
+        Print and export
+      </h2>
+      <ul className="mt-1 flex flex-col text-sm">
+        {lines.map((line) => (
+          <li key={line.name} className="flex flex-wrap items-center gap-x-4">
+            <span className="min-w-48 text-stone-700">{line.name}</span>
+            <Link href={line.print} prefetch={false} className={link}>
+              Print / PDF
+            </Link>
+            <a href={line.csv} className={link}>
+              Download CSV
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
