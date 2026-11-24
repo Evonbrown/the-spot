@@ -6,7 +6,9 @@
  *       extras with prices, meal note, line total), pickup or delivery
  *       location, ready-by time, order time, payment method and totals.
  *       Step 26: an "Actions" box with the ONE next status step + Cancel
- *       (StatusButtons). Order ID check at handover: Step 27.
+ *       (StatusButtons). Step 27: completing a PICKUP order needs the
+ *       customer's Order ID (SAF-1) and, for cash, "cash received" (PAID).
+ *       Staff also see the payment status (Unpaid / Paid).
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        getOrderForStaff (Application layer) reads through RLS (Data layer,
@@ -32,6 +34,7 @@ import StatusBadge from "@/components/StatusBadge";
 import StatusButtons from "@/components/StatusButtons";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
+import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/order-status";
 import { formatJamaicaDateTime, formatJamaicaTime } from "@/lib/order-rules";
 import { getOrderForStaff, type StaffOrderDetails } from "@/lib/orders/get-order";
 
@@ -126,7 +129,12 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
         <h2 id="actions-title" className="mb-3 text-lg font-bold">
           Actions
         </h2>
-        <StatusButtons orderId={order.id} status={order.status} fulfilment={order.fulfilment} />
+        <StatusButtons
+          orderId={order.id}
+          status={order.status}
+          fulfilment={order.fulfilment}
+          payment={order.payment}
+        />
       </section>
 
       {/* ---- Customer, fulfilment, times, payment ---- */}
@@ -165,9 +173,21 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
             <dd className="font-semibold">{formatJamaicaDateTime(order.createdAt)}</dd>
           </div>
           <div>
-            <dt className="text-sm text-stone-500">Payment method</dt>
+            {/* Step 27 (decision): staff see the payment STATUS too (customers
+                don't): it confirms cash was recorded, and shows whether a Lynk
+                order still waits for the Supervisor. */}
+            <dt className="text-sm text-stone-500">Payment</dt>
             <dd className="font-semibold">
-              {order.paymentMethod === "LYNK" ? "Lynk" : order.paymentMethod === "CASH" ? "Cash" : "—"}
+              {order.payment ? (
+                <>
+                  {PAYMENT_METHOD_LABELS[order.payment.method]} ·{" "}
+                  <span className={order.payment.status === "PAID" ? "text-green-700" : "text-amber-800"}>
+                    {PAYMENT_STATUS_LABELS[order.payment.status]}
+                  </span>
+                </>
+              ) : (
+                "—"
+              )}
             </dd>
           </div>
         </dl>

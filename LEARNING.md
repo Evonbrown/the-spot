@@ -1005,3 +1005,30 @@ The staff order details page has an **Actions** box with **one button for the ne
 - *What stops staff from moving an order from Pending straight to Completed?* The page doesn't offer it, and the server refuses anything except the next step or Cancel.
 - *How do you know who cancelled an order?* `order_status_history.changed_by` records the staff member's id, and `changed_at` records when.
 - *What if two staff tap at the same time?* The database only changes the status if it's still what they saw; the second person gets "just updated by someone else".
+
+## Step 27: Pickup handover: Order ID check and cash received (FR-03, SAF-1, FR-06)
+When a **pickup** order's next step is Completed, the button is **"Hand over order"**. Staff type the **Order ID the customer gives them**; if it doesn't match, it's blocked ("Check you have the right bag…"). For an **unpaid cash** order they must also tick **"Cash received (J$X)"**, and the payment becomes **PAID** in the **same** server step as the status change. **Lynk** orders can be handed over too, but stay **Unpaid** (the Supervisor verifies them, Build step 7). **Delivery** orders are unchanged (driver handover: Build step 6). Staff now see the payment status on the details page.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0010_pickup_handover.sql` | Data | **New.** Allows `PAID`; adds `paid_at` / `paid_by` (a PAID payment must say when and by whom); `change_order_status()` gets `p_cash_received`: marks an UNPAID **cash** payment PAID in the same transaction, refuses Lynk. |
+| `supabase/tests/0010_pickup_handover_checks.sql` | Data | **New.** 5 checks: completed + history + paid together; Lynk refused; cash only with Completed; PAID needs who/when; staff can't change payments themselves. |
+| `src/lib/orders/status-rules.ts` | Application | **Added** `needsPickupHandover()`, `cashToCollect()`, `checkPickupHandover()`. |
+| `src/lib/orders/status-actions.ts` | Application | `updateOrderStatus` takes the handover form, reads the payment fresh, checks it, passes "cash received" to the database. |
+| `src/lib/order-status.ts` | Application | **Added** payment names and labels (`PaymentMethod`, `PaymentStatus`). |
+| `src/lib/orders/get-order.ts` | Application | Also loads the payment status and amount. |
+| `src/components/StatusButtons.tsx` | Presentation | The "Hand over order" form (number keypad, cash tick, Lynk note). |
+| `src/app/staff/orders/[id]/page.tsx` | Presentation | Passes the payment; shows "Cash · Paid" / "Lynk · Unpaid". |
+
+### Key concepts
+- **SAF-1 in practice:** the check catches the WRONG BAG: staff have #1004 open, the customer says 1007, the system stops the handover.
+- **All or nothing:** COMPLETED, the history row and the cash PAID are one database transaction. If marking the cash fails, the order is NOT completed either: never "completed but the cash wasn't recorded".
+- **Defence in depth:** the page checks the ID instantly (a hint); the server checks again with the same function; the database only marks CASH (never Lynk) as paid, and won't accept PAID without who and when.
+- **Why PAID matters (FR-06):** revenue reports count PAID orders only, so cash has to be marked paid at the moment it's received.
+- **Default values keep old code working:** `p_cash_received boolean default false` means every Step 26 call still works unchanged.
+
+### Possible lecturer questions
+- *What if staff hand over the wrong order?* They must type the customer's Order ID; a different number is blocked.
+- *How do you know who took the cash?* `payments.paid_by` and `paid_at`, saved in the same transaction as the COMPLETED status.
+- *Why isn't a Lynk order marked paid when it's handed over?* FR-02: the Supervisor verifies Lynk payments. The counter can't see whether the money really arrived.

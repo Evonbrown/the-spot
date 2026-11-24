@@ -29,7 +29,7 @@
 
 import "server-only";
 import type { Size } from "@/lib/menu-helpers";
-import type { OrderStatus } from "@/lib/order-status";
+import type { OrderStatus, PaymentMethod, PaymentStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
 import { createClient } from "@/lib/supabase/server";
 
@@ -64,7 +64,10 @@ export type OrderDetails = {
   itemsTotal: number;
   deliveryFee: number;
   total: number;
-  paymentMethod: "LYNK" | "CASH" | null; // null only if the payment row is missing
+  paymentMethod: PaymentMethod | null; // null only if the payment row is missing
+  // Step 27: the whole payment (status + amount). Only the STAFF page shows
+  // the status (decision); the customer page shows the method only.
+  payment: { method: PaymentMethod; status: PaymentStatus; amount: number } | null;
   items: OrderItemDetails[];
 };
 
@@ -88,7 +91,7 @@ type ItemRow = {
   line_total: number | string;
   order_item_customizations: ExtraRow[];
 };
-type PaymentRow = { method: "LYNK" | "CASH" };
+type PaymentRow = { method: PaymentMethod; status: PaymentStatus; amount: number | string };
 type OrderRow = {
   id: number;
   created_at: string;
@@ -117,7 +120,7 @@ type StaffOrderRow = OrderRow & {
 const ORDER_COLUMNS = `id, created_at, status, fulfilment, requested_time, is_asap,
   items_total, delivery_fee, total,
   delivery_locations ( name, fee_confirmed ),
-  payments ( method ),
+  payments ( method, status, amount ),
   order_items ( id, item_name, size, unit_price, quantity, note, line_total,
     order_item_customizations ( id, customization_name, extra_price ) )`;
 
@@ -151,6 +154,9 @@ function toOrderDetails(row: OrderRow): OrderDetails {
     deliveryFee: Number(row.delivery_fee),
     total: Number(row.total),
     paymentMethod: payment?.method ?? null,
+    payment: payment
+      ? { method: payment.method, status: payment.status, amount: Number(payment.amount) }
+      : null,
     items: [...row.order_items]
       .sort((a, b) => a.id - b.id)
       .map((item) => ({

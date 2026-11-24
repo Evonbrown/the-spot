@@ -5,6 +5,9 @@
  *       the staff order details page (Step 26, FR-03 SR-3.4 / SR-3.5 / AC-3).
  *       It checks who is asking and whether the change is allowed, then saves
  *       the new status AND its history row with change_order_status().
+ *       Step 27: completing a PICKUP order also checks the Order ID the
+ *       customer gives (SAF-1) and, for unpaid cash, "cash received"; the
+ *       cash payment then becomes PAID in the same transaction (FR-06).
  *
  * LAYER: Application layer. The buttons (Presentation) only call it; the
  *        rule is checkStatusChange() (status-rules.ts); the save is the
@@ -23,7 +26,14 @@
 import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
-import { checkStatusChange } from "@/lib/orders/status-rules";
+import {
+  cashToCollect,
+  checkPickupHandover,
+  checkStatusChange,
+  needsPickupHandover,
+  type PaymentForHandover,
+  type PickupHandover,
+} from "@/lib/orders/status-rules";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,16 +48,31 @@ const SOMEONE_ELSE =
   "This order was just updated by someone else. The page now shows its latest status.";
 
 /*
- * updateOrderStatus(orderId, seenStatus, newStatus)
+ * readHandover(raw) -> the handover form's values if they have the right
+ * shape, otherwise null. (The browser can send anything.)
+ */
+function readHandover(raw: unknown): PickupHandover | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.typedOrderId !== "string" || typeof value.cashReceived !== "boolean") return null;
+  if (value.typedOrderId.length > 20) return null; // an Order ID is never this long
+  return { typedOrderId: value.typedOrderId, cashReceived: value.cashReceived };
+}
+
+/*
+ * updateOrderStatus(orderId, seenStatus, newStatus, handover?)
  *   seenStatus = the status the staff member SAW when they tapped. If the
  *   order has moved on since then (another staff member, another tab), we
  *   stop and say so, instead of applying the tap to a different step.
- * Steps 1-4 below; nothing is saved unless all pass.
+ *   handover   = Step 27: only when completing a PICKUP order: the Order ID
+ *   the customer gave and the "cash received" tick.
+ * Steps 1-5 below; nothing is saved unless all pass.
  */
 export async function updateOrderStatus(
   rawOrderId: unknown,
   rawSeenStatus: unknown,
-  rawNewStatus: unknown
+  rawNewStatus: unknown,
+  rawHandover?: unknown
 ): Promise<StatusChangeResult> {
   // ---- 1. WHO: counter staff only (strict role access) ----
   // The id comes from the signed login cookie, never from the browser.
@@ -90,7 +115,41 @@ export async function updateOrderStatus(
   const ruleError = checkStatusChange(current, rawNewStatus);
   if (ruleError) return { ok: false, error: ruleError };
 
-  // ---- 4. SAVE: status + history together (one transaction, 0009) ----
+  // ---- 4. PICKUP HANDOVER (Step 27, SAF-1 + FR-06) ----
+  // Completing a PICKUP order needs the customer's Order ID and, for unpaid
+  // cash, the "cash received" tick. The payment is read FRESH (staff may read
+  // payments, 0008); the browser's idea of it is never trusted.
+  let cashReceived = false;
+  if (needsPickupHandover(current, rawNewStatus)) {
+    const handover = readHandover(rawHandover);
+    if (!handover) return { ok: false, error: "Type the Order ID the customer gives you." };
+
+    const { data: paymentRow, error: payError } = await supabase
+      .from("payments")
+      .select("method, status, amount")
+      .eq("order_id", orderId)
+      .maybeSingle();
+    if (payError) {
+      console.error("updateOrderStatus: could not read the payment:", payError.message);
+      return { ok: false, error: "We couldn't reach the database. Please try again." };
+    }
+    const payment: PaymentForHandover | null = paymentRow
+      ? {
+          method: paymentRow.method,
+          status: paymentRow.status,
+          amount: Number(paymentRow.amount), // exact numeric can arrive as text
+        }
+      : null;
+
+    const handoverError = checkPickupHandover(orderId, payment, handover);
+    if (handoverError) return { ok: false, error: handoverError };
+
+    // Unpaid cash + ticked -> mark it PAID in the same transaction.
+    // (Lynk stays UNPAID: the Supervisor verifies it, Build step 7.)
+    cashReceived = cashToCollect(payment);
+  }
+
+  // ---- 5. SAVE: status + history (+ cash PAID) together, one transaction ----
   // Only if the status is STILL current.status (someone may tap at the same
   // moment); the function then returns false and nothing changes.
   const admin = createAdminClient();
@@ -98,7 +157,8 @@ export async function updateOrderStatus(
     p_order_id: orderId,
     p_expected_status: current.status,
     p_new_status: rawNewStatus,
-    p_changed_by: profile.id, // who changed it (from the login cookie)
+    p_changed_by: profile.id, // who changed it (and, for cash, who received it)
+    p_cash_received: cashReceived,
   });
 
   if (saveError) {
