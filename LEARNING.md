@@ -1425,3 +1425,35 @@ Every report (paper and file) starts with the same header: **The Spot**, the rep
 - *Can counter staff download the sales CSV?* No: they get "Only the Manager can download reports." (403) and no file.
 - *Why no PDF library?* Every supported browser (Chrome, Safari, Firefox, Edge) can already "Save as PDF" from the print window; a library would add weight and another thing to maintain. SR-6.9 makes PDF optional.
 - *How do you know a printed report is final?* The header says FINAL only if every day in it is approved and locked; otherwise DRAFT.
+
+## Step 38a: Supervisor screen, verifying Lynk payments (FR-02, FR-06, UC-07; SDS Supervisor)
+`/supervisor` is now the **Payments** screen:
+- **Lynk payments to check:** every UNPAID Lynk payment whose order isn't cancelled or abandoned, oldest first. Each card shows the amount, the **reference (= Order ID)**, customer + "Call", order time, pickup or delivery, and the order status.
+  - **Verify payment** -> "Received J$1,200 for #1043 in Lynk? **Yes, received** / Cancel". The payment becomes **PAID** (paid_at, paid_by = the Supervisor), so it now **counts in the sales reports** (Step 34).
+  - **Not received** (+ optional note, max 200) -> the payment is flagged but stays **UNPAID**. Counter staff see "Lynk payment not received ... Ask the customer about it before handing over the food." on the order page. If the money arrives later, the Supervisor can still verify it (the flag is then cleared).
+- **Verified today:** what's already done ("by you" / "by another supervisor").
+- Live: refreshes when any order changes, and every 30 seconds.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0020_supervisor_lynk.sql` | Data | **New.** Flag columns on payments (`not_received_at/_by/_note`); Supervisor READ rules (orders, payments, customers who ordered); `verify_lynk_payment()` and `flag_lynk_not_received()` (server only). |
+| `supabase/tests/0020_supervisor_lynk_checks.sql` | Data | **New.** 10 checks: verify + counts in sales, verify twice, only the Supervisor, not for cash, not received then verified, note length, closed day, what the Supervisor reads, no direct writes, counter staff see the flag. |
+| `src/lib/payments/supervisor-rules.ts` | Application | **New.** `NOTE_MAX`, `readNote()`, `readOrderId()`. |
+| `src/lib/payments/supervisor-actions.ts` | Application | **New.** Server Actions `verifyLynkPayment`, `flagNotReceived` (Supervisor only, secret key, clear messages). |
+| `src/lib/payments/get-lynk-payments.ts` | Application (server only) | **New.** `getLynkToCheck()`, `getLynkVerifiedToday()`. |
+| `src/components/LynkPaymentList.tsx` | Presentation (browser) | **New.** The cards, the confirmation and the note form. |
+| `src/app/supervisor/page.tsx` | Presentation | The placeholder replaced by the Payments screen. |
+| `src/lib/orders/get-order.ts`, `src/app/staff/orders/[id]/page.tsx` | Application / Presentation | The "not received" note for counter staff. |
+
+### Key concepts
+- **Why the Supervisor matters for sales:** FR-06 counts PAID orders only. A Lynk order is UNPAID until the Supervisor verifies it, so verifying is what makes it appear in the reports.
+- **Row lock ("for update"):** the function locks the payment row while it works, so two Supervisors pressing at the same moment can't both verify it; the second gets "Someone else already verified this payment."
+- **Touching the order:** payments aren't in Realtime, but orders are. The function updates `orders.updated_at`, so every screen showing that order refreshes by itself.
+- **Least privilege:** the Supervisor can READ orders, payments and customers who ordered, but can't change anything directly; only the server functions can, and they check the role again.
+- **The closed-day lock still applies:** a Lynk payment of a closed day can't be verified until the Manager reopens it ("This day is closed...").
+
+### Possible lecturer questions
+- *Can the Manager verify a Lynk payment?* No: only the Supervisor (block 3).
+- *What if the customer says they paid but nothing is in Lynk?* The Supervisor marks it "not received"; counter staff see that before handing over the food. If the money shows up later, the Supervisor verifies it then.
+- *When does a Lynk order count in the sales summary?* From the moment the Supervisor verifies it (block 1).

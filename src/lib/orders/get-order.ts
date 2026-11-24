@@ -107,6 +107,9 @@ export type StaffOrderDetails = OrderDetails & {
   readyForPickupAt: number | null;
   // Step 31 (FR-04): the driver, for delivery orders that have one.
   delivery: StaffDelivery | null;
+  // Step 38a (FR-02): the Supervisor marked this Lynk payment "not received"
+  // (when + optional note), or null. Staff then ask the customer about it.
+  lynkNotReceived: { at: number; note: string | null } | null;
 };
 
 /* Step 31: who is delivering it (from the deliveries table, migration 0013). */
@@ -167,7 +170,9 @@ type StaffOrderRow = OrderRow & {
   profiles: { full_name: string | null; phone: string | null } | null;
   order_status_history: { status: OrderStatus; changed_at: string }[] | null;
   deliveries: DeliveryRow | DeliveryRow[] | null; // one-to-one: object or list of one
+  lynk_check: LynkCheckRow | LynkCheckRow[] | null; // Step 38a (one-to-one)
 };
+type LynkCheckRow = { not_received_at: string | null; not_received_note: string | null };
 
 /*
  * The ONE query both versions use. "Embedded" related rows: Supabase follows
@@ -289,6 +294,9 @@ export async function getOrderForCustomer(
  * "order_status_history ( status, changed_at )" = every status it has had
  * and when (counter staff may read it from migration 0011, Step 28).
  * Step 31: "deliveries ( ... )" = the driver (migration 0013).
+ * Step 38a: "lynk_check:payments ( ... )" = the payment AGAIN, under the
+ *   name "lynk_check", for the Supervisor's "not received" flag (0020). Only
+ *   the staff page asks for it, so the customer's page never loads it.
  *   "driver:profiles!deliveries_driver_id_fkey" = follow the DRIVER link to
  *   profiles and call it "driver". The name after "!" is needed because
  *   deliveries links to profiles TWICE (driver_id and assigned_by), so
@@ -305,7 +313,8 @@ export async function getOrderForStaff(idText: string): Promise<StaffOrderDetail
     .select(
       `${ORDER_COLUMNS}, profiles ( full_name, phone ), order_status_history ( status, changed_at ),
        deliveries ( driver_id, drop_off_location, assigned_at,
-         driver:profiles!deliveries_driver_id_fkey ( full_name ) )`
+         driver:profiles!deliveries_driver_id_fkey ( full_name ) ),
+       lynk_check:payments ( not_received_at, not_received_note )`
     )
     .eq("id", id)
     .maybeSingle();
@@ -322,7 +331,15 @@ export async function getOrderForStaff(idText: string): Promise<StaffOrderDetail
     customer: row.profiles ? { name: row.profiles.full_name, phone: row.profiles.phone } : null,
     readyForPickupAt: findReadyForPickupAt(row.order_status_history),
     delivery: toStaffDelivery(row.deliveries),
+    lynkNotReceived: toLynkNotReceived(row.lynk_check),
   };
+}
+
+/* Step 38a: the payment's "not received" flag -> { at, note }, or null. */
+function toLynkNotReceived(value: LynkCheckRow | LynkCheckRow[] | null): { at: number; note: string | null } | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row?.not_received_at) return null;
+  return { at: Date.parse(row.not_received_at), note: row.not_received_note };
 }
 
 /* The delivery row (if any) -> our StaffDelivery shape. */

@@ -8,7 +8,8 @@
  *       Step 26: an "Actions" box with the ONE next status step + Cancel
  *       (StatusButtons). Step 27: completing a PICKUP order needs the
  *       customer's Order ID (SAF-1) and, for cash, "cash received" (PAID).
- *       Staff also see the payment status (Unpaid / Paid).
+ *       Staff also see the payment status (Unpaid / Paid), and (Step 38a) a
+ *       note when the Supervisor marked a Lynk payment "not received".
  *       Step 28: "Ready since" while it waits at the counter, and "Mark
  *       Abandoned" once 20 minutes have passed (pickup only, SR-5.5).
  *       Step 31 (FR-04 SR-4.1, TS-4.1.1 / TS-4.1.2): for DELIVERY orders, a
@@ -310,6 +311,16 @@ function OrderDetails({ order, drivers }: { order: StaffOrderDetails; drivers: D
             </dd>
           </div>
         </dl>
+        {/* Step 38a (FR-02): the Supervisor couldn't find this Lynk payment.
+            Only while it's still unpaid (verifying it clears the flag). */}
+        {order.lynkNotReceived && order.payment?.status === "UNPAID" && (
+          <p role="note" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+            <span className="font-semibold">Lynk payment not received</span> (checked by the Supervisor at{" "}
+            {formatJamaicaTime(order.lynkNotReceived.at)}
+            {order.lynkNotReceived.note && `: "${order.lynkNotReceived.note}"`}). Ask the customer about it before
+            handing over the food.
+          </p>
+        )}
       </section>
 
       {/* ---- Items and totals (prices as charged) ---- */}
