@@ -221,19 +221,27 @@ function LynkCard({ payment }: { payment: LynkToCheck }) {
           }}
           className="mt-3 rounded-lg bg-stone-50 p-3"
         >
-          <label className="text-sm font-semibold">
+          <label className="block text-sm font-semibold">
             Note for the counter staff <span className="font-normal text-stone-500">(optional)</span>
             <input
               type="text"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               maxLength={NOTE_MAX + 50}
+              aria-invalid={tooLong}
+              aria-describedby={`lynk-note-help-${payment.orderId}`}
               placeholder="e.g. Nothing in Lynk at 1:15"
               disabled={isPending}
               className="mt-1 block min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-base"
             />
           </label>
-          {tooLong && <p className="mt-1 text-sm text-red-800">At most {NOTE_MAX} characters.</p>}
+          <p
+            id={`lynk-note-help-${payment.orderId}`}
+            role={tooLong ? "alert" : undefined}
+            className={`mt-1 text-xs ${tooLong ? "font-semibold text-red-800" : "text-stone-500"}`}
+          >
+            {tooLong ? `At most ${NOTE_MAX} characters (${note.trim().length}/${NOTE_MAX}).` : `${note.trim().length}/${NOTE_MAX}`}
+          </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="submit"

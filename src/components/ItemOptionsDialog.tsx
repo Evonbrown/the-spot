@@ -253,6 +253,7 @@ export default function ItemOptionsDialog({ item, customizations, onAdd, onClose
             </label>
             <textarea
               id={`${baseId}-note`}
+              aria-describedby={`${baseId}-note-count`}
               value={note}
               onChange={(event) => setNote(event.target.value)}
               maxLength={MAX_NOTE_LENGTH}
@@ -260,7 +261,7 @@ export default function ItemOptionsDialog({ item, customizations, onAdd, onClose
               placeholder="e.g. no pepper, gravy on the side"
               className="w-full rounded-lg border border-stone-300 p-3 text-base focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
-            <p className="text-right text-xs text-stone-500">
+            <p id={`${baseId}-note-count`} className="text-right text-xs text-stone-500">
               {note.length}/{MAX_NOTE_LENGTH}
             </p>
           </div>
@@ -268,7 +269,7 @@ export default function ItemOptionsDialog({ item, customizations, onAdd, onClose
 
         {/* ---- Footer: quantity + Add button (always visible at the bottom) ---- */}
         <div className="border-t border-stone-100 p-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {/* QUANTITY: 1 to 10 (decision), shared with the cart page. */}
             <QuantityStepper value={quantity} onChange={setQuantity} />
 

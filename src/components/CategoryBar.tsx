@@ -95,8 +95,11 @@ export default function CategoryBar({ categories }: { categories: CategoryLink[]
    */
   useEffect(() => {
     const bar = barRef.current;
-    const button = bar?.querySelector<HTMLElement>(`[data-id="${activeId}"]`);
-    if (!bar || !button) return;
+    if (!bar || !activeId) return;
+    const escapedId =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(activeId) : activeId;
+    const button = bar.querySelector<HTMLElement>(`[data-id="${escapedId}"]`);
+    if (!button) return;
 
     const buttonLeft = button.offsetLeft;
     const buttonRight = buttonLeft + button.offsetWidth;
@@ -131,7 +134,7 @@ export default function CategoryBar({ categories }: { categories: CategoryLink[]
             data-id={id}
             // aria-current tells screen readers which button is the current one.
             aria-current={active ? "true" : undefined}
-            className={`min-h-11 shrink-0 rounded-full border border-brand px-4 py-2 text-sm font-semibold transition-colors ${
+            className={`inline-flex min-h-11 shrink-0 items-center rounded-full border border-brand px-4 py-2 text-sm font-semibold transition-colors ${
               active ? "bg-brand text-white" : "text-brand hover:bg-orange-100"
             }`}
           >

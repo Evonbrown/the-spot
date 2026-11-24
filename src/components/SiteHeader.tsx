@@ -19,8 +19,8 @@ import LogOutButton from "@/components/LogOutButton";
 import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { ROLE_HOME, ROLE_LABELS, ROLE_SCREEN_LINK } from "@/lib/auth/roles";
 
-// px-2 (not px-3) keeps everything on one line on small phones.
-const linkClass = "rounded-md px-2 py-2 hover:bg-brand-dark";
+// px-2 (not px-3) keeps everything on one line on small phones; min-h-11 meets mobile tap-target size.
+const linkClass = "inline-flex min-h-11 shrink-0 items-center rounded-md px-2 py-2 hover:bg-brand-dark";
 
 /*
  * SiteHeader
@@ -37,8 +37,8 @@ const linkClass = "rounded-md px-2 py-2 hover:bg-brand-dark";
 export default function SiteHeader() {
   return (
     <header className="sticky top-0 z-10 bg-brand text-white shadow print:hidden">
-      <nav className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-2 px-4">
-        <Link href="/" className="text-xl font-extrabold tracking-tight">
+      <nav aria-label="Main navigation" className="mx-auto flex min-h-14 max-w-5xl items-center justify-between gap-2 px-4">
+        <Link href="/" className="shrink-0 text-xl font-extrabold tracking-tight">
           The Spot
         </Link>
         <div className="flex items-center gap-1 text-sm font-semibold">
@@ -82,7 +82,7 @@ async function AccountArea() {
         <CartLink className={linkClass} />
         <Link
           href="/login"
-          className="rounded-md bg-white px-3 py-2 text-brand hover:bg-orange-50"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-md bg-white px-3 py-2 text-brand hover:bg-orange-50"
         >
           Log in
         </Link>

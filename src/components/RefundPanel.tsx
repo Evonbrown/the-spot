@@ -42,9 +42,10 @@ type Props = {
   refundsToday: RefundLine[];
 };
 
-export default function RefundPanel({ query, lookup, refundsToday }: Props) {
-  const input = "mt-1 block min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-base";
+const INPUT_CLASS = "mt-1 block min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-base";
+const BUTTON_CLASS = "min-h-11 rounded-lg px-4 font-semibold disabled:cursor-not-allowed disabled:opacity-60";
 
+export default function RefundPanel({ query, lookup, refundsToday }: Props) {
   return (
     <section id="refunds" aria-labelledby="refunds-title" className="scroll-mt-20">
       <h2 id="refunds-title" className="text-xl font-bold">
@@ -55,8 +56,13 @@ export default function RefundPanel({ query, lookup, refundsToday }: Props) {
       </p>
 
       {/* ---- 1. Find the order (GET form: works without JavaScript) ---- */}
-      <form method="get" action="/supervisor#refunds" className="mt-3 flex flex-wrap items-end gap-2">
-        <label className="text-sm font-semibold">
+      <form
+        method="get"
+        action="/supervisor#refunds"
+        aria-label="Find order for refund"
+        className="mt-3 flex flex-wrap items-end gap-2"
+      >
+        <label className="w-full text-sm font-semibold sm:w-auto">
           Order ID
           <input
             type="text"
@@ -65,7 +71,7 @@ export default function RefundPanel({ query, lookup, refundsToday }: Props) {
             autoComplete="off"
             defaultValue={query}
             placeholder="e.g. 1043"
-            className={`${input} w-40`}
+            className={`${INPUT_CLASS} sm:w-44`}
           />
         </label>
         <button
@@ -181,8 +187,6 @@ function RefundOrderCard({ order }: { order: RefundOrder }) {
   }
 
   const parsed = parseRefundAmount(amountText);
-  const button = "min-h-11 rounded-lg px-4 font-semibold disabled:cursor-not-allowed disabled:opacity-60";
-  const input = "mt-1 block min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-base";
 
   return (
     <div className="mt-3 rounded-xl bg-white p-4 shadow-sm">
@@ -255,7 +259,7 @@ function RefundOrderCard({ order }: { order: RefundOrder }) {
           className="mt-4 flex flex-col gap-3 border-t border-stone-100 pt-4"
         >
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-sm font-semibold">
+            <label className="w-full text-sm font-semibold sm:w-auto">
               Amount to refund (J$)
               <input
                 type="text"
@@ -265,21 +269,25 @@ function RefundOrderCard({ order }: { order: RefundOrder }) {
                 onChange={(event) => setAmountText(event.target.value)}
                 placeholder="e.g. 500"
                 disabled={isPending}
-                className={`${input} w-40`}
+                className={`${INPUT_CLASS} sm:w-44`}
               />
             </label>
             <button
               type="button"
               onClick={() => setAmountText(order.refundable.toFixed(2))}
               disabled={isPending}
-              className={`${button} border border-stone-300 bg-white text-stone-800 hover:bg-stone-50`}
+              className={`${BUTTON_CLASS} border border-stone-300 bg-white text-stone-800 hover:bg-stone-50`}
             >
               Full refund ({formatPrice(order.refundable)})
             </button>
           </div>
-          <label className="text-sm font-semibold">
-            Reason <span className="font-normal text-stone-500">(required, at least {REFUND_REASON_MIN} characters)</span>
+          <div>
+            <label htmlFor={`refund-reason-${order.orderId}`} className="text-sm font-semibold">
+              Reason <span className="font-normal text-stone-500">(required, at least {REFUND_REASON_MIN} characters)</span>
+            </label>
             <textarea
+              id={`refund-reason-${order.orderId}`}
+              aria-describedby={`refund-reason-count-${order.orderId}`}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               maxLength={REFUND_REASON_MAX}
@@ -288,9 +296,12 @@ function RefundOrderCard({ order }: { order: RefundOrder }) {
               disabled={isPending}
               className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 text-base"
             />
-          </label>
+            <p id={`refund-reason-count-${order.orderId}`} className="mt-1 text-right text-xs text-stone-500">
+              {reason.trim().length}/{REFUND_REASON_MIN} min · {reason.length}/{REFUND_REASON_MAX}
+            </p>
+          </div>
           <div>
-            <button type="submit" disabled={isPending} className={`${button} bg-brand text-white hover:bg-brand-dark`}>
+            <button type="submit" disabled={isPending} className={`${BUTTON_CLASS} bg-brand text-white hover:bg-brand-dark`}>
               Refund
             </button>
           </div>
@@ -310,7 +321,7 @@ function RefundOrderCard({ order }: { order: RefundOrder }) {
               type="button"
               onClick={confirm}
               disabled={isPending}
-              className={`${button} bg-amber-600 text-white hover:bg-amber-700`}
+              className={`${BUTTON_CLASS} bg-amber-600 text-white hover:bg-amber-700`}
             >
               {isPending ? "Saving…" : "Yes, refund"}
             </button>
@@ -318,7 +329,7 @@ function RefundOrderCard({ order }: { order: RefundOrder }) {
               type="button"
               onClick={() => setMode("form")}
               disabled={isPending}
-              className={`${button} border border-stone-300 bg-white text-stone-800`}
+              className={`${BUTTON_CLASS} border border-stone-300 bg-white text-stone-800`}
             >
               Cancel
             </button>

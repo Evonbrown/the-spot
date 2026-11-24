@@ -33,7 +33,11 @@ export default function CartLink({ className }: { className: string }) {
       Cart
       {count > 0 && (
         // The bubble: white circle with the number in our brand colour.
-        <span className="min-w-5 rounded-full bg-white px-1.5 text-center text-xs font-bold leading-5 text-brand">
+        // aria-hidden: the link's aria-label already reads "Cart, N items".
+        <span
+          aria-hidden="true"
+          className="min-w-5 rounded-full bg-white px-1.5 text-center text-xs font-bold leading-5 text-brand"
+        >
           {count}
         </span>
       )}
