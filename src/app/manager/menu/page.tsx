@@ -4,7 +4,7 @@
  * WHAT: The Manager's "Menu" screen (Step 40a, SRS QA-3 Maintainability):
  *       every menu item by category, with an Available switch, Edit and
  *       Remove, a "Removed items" list (Restore), and "Add item".
- *       (Step 40b adds extras and delivery locations here.)
+ *       Step 40b: tabs "Menu items | Extras | Delivery" (MenuTabs).
  *
  * LAYER: Presentation. requireRole (Application layer) checks "Manager
  *        only"; the list is read fresh (get-menu-admin.ts); every change goes
@@ -19,6 +19,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import ManagerNav from "@/components/ManagerNav";
 import MenuAdminList from "@/components/MenuAdminList";
+import MenuTabs from "@/components/MenuTabs";
 import { requireRole } from "@/lib/auth/require-role";
 import { getAdminMenuItems, type AdminMenuItem } from "@/lib/menu-admin/get-menu-admin";
 
@@ -63,7 +64,8 @@ async function MenuScreen({ searchParams }: { searchParams: SearchParams }) {
           + Add item
         </Link>
       </div>
-      <p className="mt-1 text-sm text-stone-600">
+      <MenuTabs current="items" />
+      <p className="mt-3 text-sm text-stone-600">
         Changes show on the customer menu straight away. Carts with old prices are checked again at checkout.
       </p>
 

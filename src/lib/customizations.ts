@@ -51,6 +51,8 @@ export async function getCustomizations(): Promise<Customization[]> {
   const { data, error } = await supabase
     .from("customizations")
     .select("id, name, kind, extra_price, is_available")
+    // Step 40b: extras the Manager REMOVED stay in the table for old orders only.
+    .eq("is_archived", false)
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 

@@ -170,7 +170,7 @@ type MenuRow = {
   is_made_to_order: boolean;
   is_archived: boolean; // Step 40a: removed from the menu by the Manager
 };
-type ExtraRow = { id: number; name: string; extra_price: number | string; is_available: boolean };
+type ExtraRow = { id: number; name: string; extra_price: number | string; is_available: boolean; is_archived: boolean };
 type LocationRow = { id: number; name: string; delivery_fee: number | string; is_active: boolean };
 
 /*
@@ -254,7 +254,7 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
       .select("id, name, price, price_small, price_medium, price_large, is_available, is_made_to_order, is_archived")
       .in("id", itemIds),
     extraIds.length > 0
-      ? db.from("customizations").select("id, name, extra_price, is_available").in("id", extraIds)
+      ? db.from("customizations").select("id, name, extra_price, is_available, is_archived").in("id", extraIds)
       : Promise.resolve({ data: [] as ExtraRow[], error: null }),
     input.deliveryLocationId !== null
       ? db
@@ -314,7 +314,8 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
     const extras: OrderItemJson["extras"] = [];
     for (const extra of line.extras) {
       const extraRow = extraById.get(extra.id);
-      if (!extraRow || !extraRow.is_available) {
+      // Step 40b: a REMOVED (archived) extra counts as not available too.
+      if (!extraRow || !extraRow.is_available || extraRow.is_archived) {
         changes.push(`The extra "${extra.name}" (on ${label}) is not available right now.`);
         continue;
       }

@@ -1623,3 +1623,30 @@ The Manager can now change the menu **without a developer**. A "Reports | Menu" 
 - *How does the Manager change a price without a developer?* Menu -> Edit -> change the price -> Save. Customers see it on their next visit; old carts are re-checked at checkout.
 - *What happens to old orders if an item is removed?* It's only hidden (block 4: the database refuses to delete an ordered item), so old orders, receipts and reports still show it.
 - *Can counter staff change the menu?* No: RLS refuses (block 2), and the screen is Manager only.
+
+## Step 40b: Manager edits extras and delivery locations (SRS QA-3)
+The Manager's Menu screen now has three tabs: **Menu items | Extras | Delivery**.
+- **Extras** (`/manager/menu/extras`): each extra has a small form: name (e.g. drop "(Sample)" once the client gives the real extras), Side / Sauce, extra price (0 = free), Available, **Save**, **Remove** (deleted if never ordered, otherwise hidden; "Removed extras" with **Restore**). "Add an extra" at the bottom.
+- **Delivery** (`/manager/menu/locations`): each location has name, fee, **Fee confirmed** (unticked = checkout shows "(sample, not final)"), **Active** (unticked = customers can't choose it), **Save**; "Add a location". **No delete**: old orders point at their location, so it's switched off instead. A note says the SRS lists three locations (UWI Mona, UTech, UWI Hospital): check with the client before adding more.
+- Changes show for customers straight away (`updateTag("menu")` for extras, `updateTag("delivery-locations")` for locations). Checkout refuses a removed or unavailable extra and an inactive location, even from an old cart.
+- Two Managers saving the same row: the second gets "Someone else changed this since you opened the page."
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0027_extras_locations_admin.sql` (+ tests) | Data | **New.** `customizations.is_archived`; name CHECKs for extras and locations. No new permissions (0004, 0005). |
+| `src/lib/menu-admin/extras-location-rules.ts` | Application | **New.** `readExtraForm`, `readLocationForm`. |
+| `src/lib/menu-admin/extras-location-actions.ts` | Application | **New.** `saveExtra`, `removeExtra`, `restoreExtra`, `saveLocation` (shared "add or edit" with the updated_at check). |
+| `src/lib/menu-admin/get-extras-locations-admin.ts` | Application (server only) | **New.** Every extra / location, not cached. |
+| `src/app/manager/menu/extras/page.tsx`, `locations/page.tsx`, `src/components/ExtrasAdmin.tsx`, `LocationsAdmin.tsx`, `MenuTabs.tsx` | Presentation | **New.** The two tabs and the tab bar. |
+| `src/lib/customizations.ts`, `src/lib/orders/actions.ts` | Application | Leave out / refuse removed extras. |
+
+### Key concepts
+- **Switch off vs. delete:** a delivery location is never deleted (orders.delivery_location_id points at it); `is_active = false` hides it from checkout but keeps history correct.
+- **One form per row:** each row has its own `useActionState`, so its own "Saved" / error message shows next to it.
+- **Two caches, two tags:** extras are cached with the menu (tag "menu"), locations separately (tag "delivery-locations"); each save throws away the right one.
+
+### Possible lecturer questions
+- *How does the Manager confirm the real delivery fee?* Delivery tab -> type the fee -> tick "Fee confirmed" -> Save. Checkout stops saying "(sample, not final)".
+- *What if a location closes?* Untick Active: customers can't choose it; old orders still show it.
+- *Why can't a location be deleted?* Old orders point at it (foreign key); deleting would break their history.
