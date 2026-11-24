@@ -1114,3 +1114,38 @@ No database change: customers could already read only their own orders (0006), a
 - *Could a customer see someone else's order by typing /orders/1005?* No: RLS hides it, our query also filters by their id, and the page shows "Order not found" (the same message as for a number that doesn't exist).
 - *How does the status reach the customer within 5 seconds (PR-2)?* Staff press a button → the database row changes → Supabase Realtime sends a message to the customer's browser (usually under a second) → the page re-reads and re-draws.
 - *Why not send the new status in the message and show it directly?* The message only holds the orders row. Re-reading keeps ONE way of building the page, and every read goes through RLS.
+
+## Step 30: Customer notifications, simulated SMS/email (FR-05 SR-5.4 / AC-4)
+When an order's status changes to **Ready for pickup**, **Cancelled** or **Abandoned**, the **database** automatically writes **one notification** for that customer. Nothing is really sent yet (simulated): the row records the **channel** (SMS, or EMAIL only if there's no phone), **where it went** (a copy of the phone/email), the **message** and **when**. The customer sees them on their order page under **"Messages we sent you"** (phone masked as "•••• 1234"), live.
+
+### The messages
+| Status | Message |
+|---|---|
+| Ready for pickup (pickup) | "The Spot: Order #1004 is ready for pickup. Show your Order ID at the counter." |
+| Ready for pickup (delivery) | "The Spot: Order #1004 is ready and will leave with a driver soon." |
+| Cancelled | "The Spot: Order #1004 was cancelled. Questions? Please ask at the counter." |
+| Abandoned | "The Spot: Order #1004 was not collected, so it was marked abandoned. Questions? Please ask at the counter." |
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0012_notifications.sql` | Data | **New.** `notifications` table (unique per order + status), RLS (customers read their own; nobody writes with the public key), function `notify_customer_of_status()` + AFTER trigger `orders_notify_customer`. |
+| `supabase/tests/0012_notifications_checks.sql` | Data | **New.** 7 checks: Ready = 1, Cancelled = 1, Abandoned adds 1, In progress = 0 (+ delivery wording), no duplicates, other customers see 0, customers can't write. |
+| `src/lib/orders/get-order.ts` | Application | `getOrderForCustomer` also loads the order's notifications (newest first). New types `OrderNotification`, `CustomerOrderDetails`. |
+| `src/components/OrderNotifications.tsx` | Presentation | **New.** "Messages we sent you": masked contact, time, message; a note before any message. |
+| `src/app/orders/[id]/page.tsx` | Presentation | Shows the box under the order status. |
+
+### Key concepts
+- **AFTER trigger vs BEFORE trigger:** Step 28's rules run BEFORE the change (to refuse it); this one runs AFTER (to react to it). A refused change never reaches the AFTER trigger, so it never sends a message.
+- **Same transaction = can't be missed:** the status change, its history row and the notification are saved together. If the notification failed, the status change would be undone too.
+- **"Never twice":** a UNIQUE rule on (order_id, status), and the insert uses `on conflict do nothing`. (Step 28 already makes a status impossible to repeat; this is a second lock.)
+- **security definer:** the trigger function runs with its owner's rights, because the login email is in Supabase's `auth.users` table, which normal users can't read. Nobody can call it directly.
+- **Copy, don't link:** `sent_to` stores the phone/email AT THAT MOMENT, like order items store the price at that moment (Part 19). A record of what happened must not change later.
+- **Live for free:** the order's Realtime message only arrives after the transaction is saved, so the page's re-read already includes the new notification. No extra subscription.
+- **Simulation that fits the real thing:** a real SMS service later only has to read new rows and send them; nothing else changes.
+
+### Possible lecturer questions
+- *What if staff mark an order ready and the notification fails?* Then the whole change is undone (same transaction) and staff see "We couldn't save the change". It can't be ready without a notification.
+- *Why is it in the database, not the server action?* Every way of changing a status (staff buttons now, the driver screen later) goes through the orders table, so the trigger can't be forgotten.
+- *Can a customer see another customer's messages?* No: RLS only returns rows where customer_id is the logged-in user (tested in block 6).
+- *Why no message for In progress?* SR-5.4 only asks for Ready, Cancelled and Abandoned; the trigger's WHEN condition only fires for those.

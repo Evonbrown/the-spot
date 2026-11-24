@@ -27,8 +27,12 @@
  * refresh (PR-2: within 5 s). Realtime checks RLS, so a customer only ever
  * hears about their own orders.
  *
+ * STEP 30 (FR-05 SR-5.4): "Messages we sent you" (OrderNotifications): the
+ * simulated SMS/email the database wrote when the order became Ready for
+ * pickup, Cancelled or Abandoned. Live too: they're saved in the same
+ * transaction as the status change, so the same refresh shows them.
+ *
  * NOT HERE YET:
- *   - Step 30: notifications (Ready / Cancelled / Abandoned).
  *   - Payment status ("not paid yet"): decision, not shown for now.
  */
 
@@ -36,12 +40,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import OrderLiveRefresh from "@/components/OrderLiveRefresh";
+import OrderNotifications from "@/components/OrderNotifications";
 import OrderProgress from "@/components/OrderProgress";
 import PaymentInstructions from "@/components/PaymentInstructions";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
 import { formatJamaicaDateTime, formatJamaicaTime } from "@/lib/order-rules";
-import { getOrderForCustomer, type OrderDetails } from "@/lib/orders/get-order";
+import { getOrderForCustomer, type CustomerOrderDetails, type OrderDetails } from "@/lib/orders/get-order";
 
 export const metadata: Metadata = {
   title: "Your order",
@@ -85,7 +90,7 @@ async function OrderContent({ params }: { params: Promise<{ id: string }> }) {
     returnTo: `/orders/${encodeURIComponent(id)}`,
   });
 
-  let order: OrderDetails | null;
+  let order: CustomerOrderDetails | null;
   try {
     order = await getOrderForCustomer(id, profile.id);
   } catch {
@@ -147,7 +152,7 @@ function timeText(order: OrderDetails): string {
  * OrderInvoice: the confirmation itself.
  * PHONES: one column. All prices are the ones SAVED with the order.
  */
-function OrderInvoice({ order }: { order: OrderDetails }) {
+function OrderInvoice({ order }: { order: CustomerOrderDetails }) {
   const isDelivery = order.fulfilment === "DELIVERY";
 
   return (
@@ -180,6 +185,12 @@ function OrderInvoice({ order }: { order: OrderDetails }) {
           locationName={order.deliveryLocation?.name ?? null}
         />
       </section>
+
+      {/* ---- Step 30 (FR-05 SR-5.4): the (simulated) SMS/email messages ---- */}
+      <OrderNotifications
+        notifications={order.notifications}
+        pastReady={order.status !== "PENDING" && order.status !== "IN_PROGRESS"}
+      />
 
       {/* ---- Pickup or delivery + time (FR-01) + payment method (FR-02) ---- */}
       <section className="mt-4 rounded-xl bg-white p-5 shadow-sm">

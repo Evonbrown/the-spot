@@ -5,7 +5,8 @@
  *       (size, extras, note), totals, pickup/delivery and location, the
  *       times, the status and the payment method.
  *         getOrderForCustomer(id, customerId) -> the customer's confirmation
- *                                                page (Part 22)
+ *                                                page (Part 22), with its
+ *                                                notifications (Step 30)
  *         getOrderForStaff(id)                -> the counter staff's order
  *                                                details page (Step 25), which
  *                                                ALSO shows the customer's
@@ -73,6 +74,28 @@ export type OrderDetails = {
 };
 
 /*
+ * Step 30 (FR-05 SR-5.4): one message we "sent" the customer (simulated SMS
+ * or email), written by the database trigger in migration 0012.
+ */
+export type OrderNotification = {
+  id: number;
+  status: OrderStatus; // READY_FOR_PICKUP, CANCELLED or ABANDONED
+  channel: "SMS" | "EMAIL";
+  sentTo: string | null; // the phone / email it "went to" (null = none on file)
+  message: string;
+  sentAt: number; // milliseconds since 1970
+};
+
+/*
+ * CustomerOrderDetails: the customer's view, plus the messages sent about
+ * this order (newest first). Only the CUSTOMER page loads them (RLS: they
+ * can only read their own).
+ */
+export type CustomerOrderDetails = OrderDetails & {
+  notifications: OrderNotification[];
+};
+
+/*
  * StaffOrderDetails: the same, plus WHO ordered (SR-3.2: staff may need to
  * call the customer). customer is null only if their profile can't be read.
  */
@@ -112,6 +135,17 @@ type OrderRow = {
   // of one, to be safe.
   payments: PaymentRow | PaymentRow[] | null;
   order_items: ItemRow[];
+};
+type NotificationRow = {
+  id: number;
+  status: OrderStatus;
+  channel: "SMS" | "EMAIL";
+  sent_to: string | null;
+  message: string;
+  sent_at: string;
+};
+type CustomerOrderRow = OrderRow & {
+  notifications: NotificationRow[] | null;
 };
 type StaffOrderRow = OrderRow & {
   profiles: { full_name: string | null; phone: string | null } | null;
@@ -185,19 +219,21 @@ function toOrderDetails(row: OrderRow): OrderDetails {
  * null when the id isn't a number, there's no such order, OR it belongs to
  * someone else (RLS hides it). The page shows the SAME "Order not found" for
  * all of these, so nobody can find out which order numbers exist.
+ * Step 30: also loads this order's notifications (newest first), through
+ * RLS (migration 0012: customers read only their own).
  * THROWS if the database can't be reached (the page shows a "try again" message).
  */
 export async function getOrderForCustomer(
   idText: string,
   customerId: string
-): Promise<OrderDetails | null> {
+): Promise<CustomerOrderDetails | null> {
   const id = parseOrderId(idText);
   if (id === null) return null;
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("orders")
-    .select(ORDER_COLUMNS)
+    .select(`${ORDER_COLUMNS}, notifications ( id, status, channel, sent_to, message, sent_at )`)
     .eq("id", id)
     .eq("customer_id", customerId) // our own lock, on top of RLS
     .maybeSingle(); // 0 rows -> data is null (not an error)
@@ -206,7 +242,23 @@ export async function getOrderForCustomer(
     console.error("getOrderForCustomer failed:", error.message);
     throw new Error("Could not load the order.");
   }
-  return data ? toOrderDetails(data as unknown as OrderRow) : null;
+  if (!data) return null;
+
+  const row = data as unknown as CustomerOrderRow;
+  return {
+    ...toOrderDetails(row),
+    // Newest first; the id breaks ties (two in the same second).
+    notifications: (row.notifications ?? [])
+      .map((n) => ({
+        id: n.id,
+        status: n.status,
+        channel: n.channel,
+        sentTo: n.sent_to,
+        message: n.message,
+        sentAt: Date.parse(n.sent_at),
+      }))
+      .sort((a, b) => b.sentAt - a.sentAt || b.id - a.id),
+  };
 }
 
 /*
