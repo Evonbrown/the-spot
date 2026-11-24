@@ -37,15 +37,15 @@ Rules:
 - Current placeholder colours live in `src/app/globals.css` (`@theme`), so the switch should happen there.
 
 ## Open decisions (settle before Build step 8)
-- Login with "email or student ID": the SRS allows both. For now login is EMAIL ONLY. Decide whether to add student ID login (and how customers without a student ID log in) before Build step 8.
+- (none open) Student ID login was settled in Step 39a (see "Decisions made").
 
 ## Decisions made
 - Menu is public: anyone can browse it without logging in. Only ordering needs an account.
 - Menu item category is a plain text column (not an enum).
 - The cart lives in the browser for now; the server re-checks prices and availability at checkout (Build step 3).
-- Strict role access: each role opens only its own screen (e.g. a manager cannot open /staff).
+- Strict role access: each role opens only its own screen (e.g. a manager cannot open /staff). Exception (Step 39a): /account ("My account") is open to every logged-in role, own details only.
 - Phone number is required at sign-up; minimum password length is 8.
-- Login is email only for now (see "Open decisions" for student ID login).
+- Login with EMAIL OR STUDENT ID (Step 39a, SRS Section 3, Evon): profiles.student_id optional, exactly 9 digits, UNIQUE, entered at sign-up and editable on /account (name in the header links there; name, phone, student ID editable; email/role read-only). Login box "Email or student ID": "@" = email, 9 digits = student ID (server looks up the email with login_identify(), migration 0022, service_role only), else "Enter your email or your 9-digit student ID." Every failure: "Email/student ID or password is incorrect." Sign-up / My account say "That student ID is already used by another account" (accepted trade-off). Step 39 split: 39a student ID login, 39b lock after 5 failed logins (15 min; per account, email + student ID together; unknown identifiers lock too; server also bans the account in Supabase Auth for 15 min; message shows the time), 39c staff idle logout after 30 min (warning at 28 min; profiles.last_active_at checked by the server; customers unaffected). Dev-only TEST_SHORT_SECURITY_TIMERS for quick tests.
 - Sizes (Option C): MenuItem has `price` (single-price items, e.g. drinks) OR `price_small` / `price_medium` / `price_large` (food). An empty size = not offered. No new class/table. Drinks sold in two sizes stay as separate single-price items (e.g. "Sprite (Small)").
 - Real menu (the-spot-real-menu.md), until the client answers:
   - Items with no price (Snapper Fish, Boom, Supligen, True Juice) are left out.

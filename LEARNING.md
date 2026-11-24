@@ -1492,3 +1492,32 @@ The rules (server action AND database): **only the Supervisor**; only a **paid**
 - *Can the Manager refund?* No, only the Supervisor (UC-07; block 7).
 - *Can a J$1,000 order be refunded J$1,200?* No: all refunds together can't exceed what was paid (blocks 2, 3).
 - *A customer brings back yesterday's meal after yesterday was closed: what happens?* The Supervisor refunds it today; it lowers TODAY's net and expected cash; yesterday's closed figures stay the same (block 9).
+
+## Step 39a: Log in with email OR student ID (SRS Section 3, Security)
+- **Sign up:** a new optional field "Student ID" (exactly 9 digits, e.g. 620165372).
+- **Log in:** the box is now **"Email or student ID"**. Anything with "@" is an email; 9 digits is a student ID; anything else gets "Enter your email or your 9-digit student ID."
+- **Every failed login gets the same message:** "Email/student ID or password is incorrect.", whether the ID or email doesn't exist or the password is wrong.
+- **My account** (`/account`, every role; tap your name in the header): change your name, phone and student ID. Email and role are shown, not editable.
+- Staff and visitors without a student ID keep logging in with their email.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0022_student_id.sql` | Data | **New.** `profiles.student_id` (9 digits, unique, optional, user-editable); sign-up trigger copies it; `login_identify()` (server only) finds an account by email or student ID. |
+| `supabase/tests/0022_student_id_checks.sql` | Data | **New.** 7 checks: format, unique, trigger (and never a role from the form), lookup by ID / email / unknown, own vs. someone else's, role still locked, lookup refused for users. |
+| `src/lib/auth/identifier.ts` | Application | **New.** `parseLoginIdentifier`, `isStudentId`, `readStudentIdInput`, `isValidEmail`, `isValidPhone`. |
+| `src/lib/auth/actions.ts` | Application | `signUp` saves the student ID (checks it's free); `logIn` accepts email or student ID (`findAccount`). |
+| `src/lib/auth/account-actions.ts`, `src/components/AccountForm.tsx`, `src/app/account/page.tsx` | Application / Presentation | **New.** "My account". |
+| `src/components/LoginForm.tsx`, `SignUpForm.tsx`, `SiteHeader.tsx`, `src/lib/auth/get-profile.ts`, `roles.ts`, `src/app/login/page.tsx` | Presentation / Application | New fields and labels; name links to My account; `/account` needs a login. |
+
+### Key concepts
+- **Supabase Auth only knows emails.** For a student ID, the server first looks up the matching email (`login_identify`, secret key), then logs in with it; Supabase still checks the (hashed) password.
+- **Not revealing who has an account ("account enumeration"):** the login gives one message for every failure, and the lookup function can only be called by our server, never by visitors.
+- **Honest trade-off:** at sign-up / My account, "That student ID is already used by another account" does reveal that an ID exists; a UNIQUE value can't be enforced without saying so. Logging in never reveals it.
+- **UNIQUE + NULL:** many people can have NO student ID (NULL), but two can't have the same one.
+- **Column grants:** users may update only full_name, phone and student_id of their own row; role stays locked.
+
+### Possible lecturer questions
+- *How does student ID login work if Supabase only uses emails?* The server finds the email for that ID, then logs in normally.
+- *Can someone find out if a student ID is registered by trying to log in?* No: same message for every failure, and the lookup function is server-only (block 7).
+- *Can two people use the same student ID?* No: the database's UNIQUE rule (block 2).

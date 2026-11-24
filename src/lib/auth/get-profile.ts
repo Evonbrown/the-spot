@@ -18,6 +18,7 @@ export type Profile = {
   email: string;
   full_name: string | null;
   phone: string | null;
+  student_id: string | null; // Step 39a: optional, 9 digits (log in with it)
   role: UserRole;
 };
 
@@ -52,7 +53,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, full_name, phone, role")
+    .select("id, full_name, phone, student_id, role")
     .eq("id", claims.sub) // "sub" (subject) = the logged-in user's id
     .maybeSingle();
 

@@ -1,7 +1,8 @@
 /*
  * src/components/LoginForm.tsx
  *
- * WHAT: The log-in form (email + password). Used by EVERY role: customers,
+ * WHAT: The log-in form (email or student ID + password; student ID from
+ *       Step 39a). Used by EVERY role: customers,
  *       counter staff, drivers, managers and supervisors all log in here.
  * LAYER: Presentation. The real work happens on the server in
  *        src/lib/auth/actions.ts (logIn).
@@ -36,15 +37,20 @@ export default function LoginForm() {
       {/* Hidden field: tells the server where to send you after logging in. */}
       {next && <input type="hidden" name="next" value={next} />}
 
-      {/* Email only for now. The SRS also mentions "email or student ID" (still to decide). */}
+      {/* Step 39a (SRS Section 3): email OR 9-digit student ID. type="text"
+          (not "email"), so the browser accepts a student ID too;
+          autoComplete="username" lets password managers fill it in. */}
       <label className="block text-sm font-semibold">
-        Email
+        Email or student ID
         <input
-          name="email"
-          type="email"
-          autoComplete="email"
+          name="identifier"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          placeholder="you@example.com or 620165372"
           required
-          defaultValue={state.fields?.email}
+          defaultValue={state.fields?.identifier}
           className={inputClass}
         />
       </label>

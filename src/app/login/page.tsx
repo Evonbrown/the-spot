@@ -28,7 +28,9 @@ export default function LoginPage({
         <RedirectIfLoggedIn searchParams={searchParams} />
       </Suspense>
       <h1 className="text-3xl font-extrabold">Log in</h1>
-      <p className="mt-1 mb-6 text-sm text-stone-600">Customers and staff log in here.</p>
+      <p className="mt-1 mb-6 text-sm text-stone-600">
+        Customers and staff log in here, with your email or student ID.
+      </p>
       {/* The form reads ?next=... (e.g. /checkout) with useSearchParams, which
           Next.js requires to sit inside <Suspense>. The fallback is a plain
           grey box, NOT a second form, so there is never a copy without "next". */}

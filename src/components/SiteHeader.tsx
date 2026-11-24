@@ -110,11 +110,17 @@ async function AccountArea() {
           <CartLink className={linkClass} />
         </>
       )}
-      {/* "truncate" + max width: long names get "…" instead of breaking the header on phones */}
-      <div className="max-w-[6.5rem] px-1 text-right leading-tight">
-        <p className="truncate">{profile.full_name || profile.email}</p>
-        <p className="truncate text-xs font-normal opacity-90">{ROLE_LABELS[profile.role]}</p>
-      </div>
+      {/* "truncate" + max width: long names get "…" instead of breaking the header on phones.
+          Step 39a: the name is a link to "My account" (no extra word, so the
+          header still fits on one line on small phones). */}
+      <Link
+        href="/account"
+        title="My account"
+        className="max-w-[6.5rem] rounded-md px-1 text-right leading-tight hover:bg-white/10"
+      >
+        <span className="block truncate underline-offset-2 hover:underline">{profile.full_name || profile.email}</span>
+        <span className="block truncate text-xs font-normal opacity-90">{ROLE_LABELS[profile.role]}</span>
+      </Link>
       <LogOutButton className={linkClass} />
     </>
   );

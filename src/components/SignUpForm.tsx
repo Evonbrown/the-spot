@@ -1,7 +1,8 @@
 /*
  * src/components/SignUpForm.tsx
  *
- * WHAT: The sign-up form: full name, phone, email, password.
+ * WHAT: The sign-up form: full name, phone, student ID (optional, Step 39a),
+ *       email, password.
  * LAYER: Presentation. It only collects input and shows results. The real
  *        checks happen on the server in src/lib/auth/actions.ts (signUp).
  *
@@ -68,6 +69,25 @@ export default function SignUpForm() {
         />
         <span className="mt-1 block text-xs font-normal text-stone-500">
           Used for order alerts and by our delivery driver.
+        </span>
+      </label>
+
+      {/* Step 39a: OPTIONAL. With a student ID you can also log in with it
+          instead of your email. inputMode="numeric" = phones show a number pad. */}
+      <label className="block text-sm font-semibold">
+        Student ID <span className="font-normal text-stone-500">(optional)</span>
+        <input
+          name="studentId"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="620165372"
+          maxLength={11}
+          defaultValue={state.fields?.studentId}
+          className={inputClass}
+        />
+        <span className="mt-1 block text-xs font-normal text-stone-500">
+          9 digits. You can then log in with your student ID or your email.
         </span>
       </label>
 

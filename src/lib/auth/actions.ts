@@ -16,9 +16,34 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { isValidEmail, isValidPhone, parseLoginIdentifier, readStudentIdInput } from "@/lib/auth/identifier";
 import type { UserRole } from "@/lib/auth/roles";
 import { pathAfterLogin } from "@/lib/auth/safe-next";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+
+/*
+ * Step 39a: the ONE message for every failed login (unknown email, unknown
+ * student ID or wrong password), so nobody can find out which emails or
+ * student IDs have accounts.
+ */
+const LOGIN_FAILED = "Email/student ID or password is incorrect.";
+
+/*
+ * findAccount(identifier) -> { userId, email } or null.
+ * Asks the database function login_identify (migration 0022), which only our
+ * server may call (secret key): it reads Supabase's private list of emails.
+ */
+async function findAccount(identifier: string): Promise<{ userId: string; email: string } | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("login_identify", { p_identifier: identifier });
+  if (error) {
+    console.error("login_identify failed:", error.message);
+    return null;
+  }
+  const row = (data as { user_id: string; email: string }[] | null)?.[0];
+  return row ? { userId: row.user_id, email: row.email } : null;
+}
 
 /*
  * AuthFormState: what an action sends back to the form.
@@ -30,7 +55,7 @@ import { pathAfterLogin } from "@/lib/auth/safe-next";
 export type AuthFormState = {
   error?: string;
   message?: string;
-  fields?: { fullName?: string; phone?: string; email?: string };
+  fields?: { fullName?: string; phone?: string; email?: string; studentId?: string; identifier?: string };
 };
 
 // Security requirement: minimum password length. Also set to 8 in the Supabase dashboard.
@@ -46,23 +71,6 @@ function readText(formData: FormData, name: string): string {
 }
 
 /*
- * isValidPhone("876-555-1234") -> true
- * Allows digits, spaces, dashes and one leading "+". Must contain 7 to 15 digits
- * (15 is the international maximum). FR-04/FR-05 need a real number for the
- * driver and for SMS alerts, so phone is REQUIRED.
- */
-function isValidPhone(phone: string): boolean {
-  if (!/^\+?[0-9\s-]+$/.test(phone)) return false;
-  const digitCount = phone.replace(/\D/g, "").length; // \D = "not a digit"
-  return digitCount >= 7 && digitCount <= 15;
-}
-
-// A simple email shape check: something@something.something
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-/*
  * signUp — creates a new CUSTOMER account.
  * "prevState" is the last result. React's useActionState hook passes it in
  * (we don't need it, but the hook requires the parameter to be there).
@@ -74,8 +82,9 @@ export async function signUp(
   const fullName = readText(formData, "fullName");
   const phone = readText(formData, "phone");
   const email = readText(formData, "email").toLowerCase();
+  const studentIdText = readText(formData, "studentId");
   const password = formData.get("password");
-  const fields = { fullName, phone, email };
+  const fields = { fullName, phone, email, studentId: studentIdText };
 
   // ---- 1. Check the input (server-side validation) ----
   if (fullName.length < 2) {
@@ -87,8 +96,17 @@ export async function signUp(
   if (!isValidEmail(email)) {
     return { error: "Please enter a valid email address.", fields };
   }
+  // Step 39a: the student ID is OPTIONAL (staff and visitors may not have one).
+  const studentId = readStudentIdInput(studentIdText);
+  if ("error" in studentId) return { error: studentId.error, fields };
   if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
     return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, fields };
+  }
+  // Two accounts can't share a student ID (the database refuses it too). This
+  // tells the person the ID is taken: there's no way to keep an ID unique
+  // without saying so (decision, Step 39a). Logging in never reveals it.
+  if (studentId.studentId && (await findAccount(studentId.studentId))) {
+    return { error: "That student ID is already used by another account.", fields };
   }
 
   // ---- 2. Ask Supabase Auth to create the account ----
@@ -100,15 +118,22 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName, phone } },
+    options: { data: { full_name: fullName, phone, student_id: studentId.studentId } },
   });
 
   if (error) {
+    console.error("signUp failed:", error.code, error.message);
     if (error.code === "user_already_exists") {
       return { error: "An account with this email already exists. Try logging in.", fields };
     }
     if (error.code === "weak_password") {
       return { error: "That password is too weak. Try a longer one.", fields };
+    }
+    // Two people signing up with the same student ID at the same moment: the
+    // check above passed for both, but the database's UNIQUE rule stops the
+    // second one, and Supabase reports a general database error.
+    if (studentId.studentId && /database error/i.test(error.message)) {
+      return { error: "That student ID is already used by another account.", fields };
     }
     return { error: "Sign up failed. Please try again.", fields };
   }
@@ -127,28 +152,45 @@ export async function signUp(
 }
 
 /*
- * logIn — logs in ANY role (customer, staff, manager, ...) with email + password.
- * For now: email only. (SRS also mentions "email or student ID"; still to decide.)
+ * logIn — logs in ANY role (customer, staff, manager, ...) with EMAIL OR
+ * STUDENT ID + password (Step 39a, SRS Section 3).
+ *   - an email: logged in with it directly;
+ *   - a 9-digit student ID: we look up the email that belongs to it
+ *     (findAccount), then log in with that email. Supabase Auth only knows
+ *     emails, and still checks the password itself (hashed).
+ * Every failure gives the SAME message (LOGIN_FAILED), whether the ID or
+ * email doesn't exist or the password is wrong.
  */
 export async function logIn(
   prevState: AuthFormState,
   formData: FormData
 ): Promise<AuthFormState> {
-  const email = readText(formData, "email").toLowerCase();
+  const identifierText = readText(formData, "identifier");
   const password = formData.get("password");
-  const fields = { email };
+  const fields = { identifier: identifierText };
 
-  if (!isValidEmail(email) || typeof password !== "string" || password.length === 0) {
-    return { error: "Please enter your email and password.", fields };
+  const identifier = parseLoginIdentifier(identifierText);
+  if ("error" in identifier) return { error: identifier.error, fields };
+  if (typeof password !== "string" || password.length === 0) {
+    return { error: "Please enter your password.", fields };
   }
+
+  // Which email do we log in with?
+  let email: string | null = identifier.value;
+  if (identifier.kind === "studentId") {
+    const account = await findAccount(identifier.value);
+    email = account?.email ?? null; // unknown ID -> no email -> same failure message
+  }
+  if (!email) return { error: LOGIN_FAILED, fields };
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    // SECURITY: always the SAME message, whether the email doesn't exist or the
-    // password is wrong. Otherwise an attacker could find out which emails have accounts.
-    return { error: "Email or password is incorrect.", fields };
+    // SECURITY: always the SAME message, whether the email / student ID
+    // doesn't exist or the password is wrong. Otherwise an attacker could
+    // find out which emails and student IDs have accounts.
+    return { error: LOGIN_FAILED, fields };
   }
 
   // Send each role to its own screen (e.g. counter_staff -> /staff).

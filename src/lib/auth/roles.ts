@@ -50,5 +50,6 @@ export const ROLE_SCREEN_LINK: Partial<Record<UserRole, string>> = {
   supervisor: "Payments",
 };
 
-// The staff-only screens. The proxy sends logged-out visitors away from these.
-export const PROTECTED_PATHS = ["/staff", "/driver", "/manager", "/supervisor"];
+// The screens that need a login (the staff screens + "My account", Step 39a).
+// The proxy sends logged-out visitors away from these.
+export const PROTECTED_PATHS = ["/staff", "/driver", "/manager", "/supervisor", "/account"];
