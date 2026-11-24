@@ -105,6 +105,9 @@ export async function getSalesSummary(day: string): Promise<{ summary: SalesSumm
     console.error("getSalesSummary failed:", error.message);
     return { error: safeMessage(error.message, "We couldn't load the sales summary. Please try again.") };
   }
+  if (!data || typeof data !== "object") {
+    return { error: "We couldn't load the sales summary. Please try again." };
+  }
 
   return { summary: toSummary(data as RawSummary) };
 }
@@ -220,8 +223,14 @@ export async function getSalesRange(start: string, end: string): Promise<{ range
     console.error("getSalesRange failed:", error.message);
     return { error: safeMessage(error.message, "We couldn't load the sales for that range. Please try again.") };
   }
+  if (!data || typeof data !== "object") {
+    return { error: "We couldn't load the sales for that range. Please try again." };
+  }
 
   const raw = data as { start: string; end: string; total: RawSummary; days: Record<string, unknown>[] | null };
+  if (!raw.total || typeof raw.total !== "object") {
+    return { error: "We couldn't load the sales for that range. Please try again." };
+  }
   return {
     range: {
       start: raw.start,

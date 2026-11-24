@@ -70,6 +70,9 @@ export async function getCloseout(day: string): Promise<{ details: CloseoutDetai
     console.error("getCloseout failed:", error.message);
     return { error: safeMessage(error.message, "We couldn't load the closeout. Please try again.") };
   }
+  if (!data || typeof data !== "object") {
+    return { error: "We couldn't load the closeout. Please try again." };
+  }
 
   const raw = data as {
     day: string;

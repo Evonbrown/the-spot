@@ -82,13 +82,15 @@ export async function updateOrderStatus(
 
   // ---- 2. SHAPE: a real order number and real status names ----
   // (The browser can send anything, so we check by hand.)
-  if (!Number.isSafeInteger(rawOrderId) || (rawOrderId as number) <= 0) {
+  if (typeof rawOrderId !== "number" || !Number.isSafeInteger(rawOrderId) || rawOrderId <= 0) {
     return { ok: false, error: "That order number isn't valid." };
   }
   if (!isStatus(rawSeenStatus) || !isStatus(rawNewStatus)) {
     return { ok: false, error: "That status isn't valid." };
   }
-  const orderId = rawOrderId as number;
+  const orderId = rawOrderId;
+  const seenStatus = rawSeenStatus;
+  const newStatus = rawNewStatus;
 
   // ---- 3. FRESH ORDER + THE RULE ----
   // Read with the staff member's OWN login (RLS: counter staff may read
@@ -124,16 +126,16 @@ export async function updateOrderStatus(
     readyForPickupAt: findReadyForPickupAt(row.order_status_history),
     hasDriver: Array.isArray(row.deliveries) ? row.deliveries.length > 0 : row.deliveries !== null,
   };
-  if (current.status !== rawSeenStatus) return { ok: false, error: SOMEONE_ELSE };
+  if (current.status !== seenStatus) return { ok: false, error: SOMEONE_ELSE };
 
   // THE rule (Step 28: forward only, finished locked, Abandoned after 20 min).
   // Date.now() = the SERVER's clock, never a time sent by the browser.
-  const ruleError = checkStatusChange(current, rawNewStatus, Date.now());
+  const ruleError = checkStatusChange(current, newStatus, Date.now());
   if (ruleError) return { ok: false, error: ruleError };
 
   // Step 33 (decision B): for DELIVERY orders the driver marks Being
   // delivered; counter staff only keep Cancel and the backup "Complete".
-  const deliveryProblem = counterDeliveryProblem(current, rawNewStatus);
+  const deliveryProblem = counterDeliveryProblem(current, newStatus);
   if (deliveryProblem) return { ok: false, error: deliveryProblem };
 
   // ---- 4. HANDOVER (SAF-1 + FR-06) ----
@@ -142,7 +144,7 @@ export async function updateOrderStatus(
   // "cash received" tick. The payment is read FRESH (staff may read payments,
   // 0008); the browser's idea of it is never trusted.
   let cashReceived = false;
-  if (needsHandover(rawNewStatus)) {
+  if (needsHandover(newStatus)) {
     const handover = readHandover(rawHandover);
     if (!handover) return { ok: false, error: "Type the Order ID the customer gives you." };
 
