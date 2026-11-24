@@ -825,3 +825,42 @@ So we can test checkout at night, there is a **test-only** setting that makes Th
 
 ### Possible lecturer questions
 - *Couldn't a customer turn test mode on?* No. It's read on the server from the server's own settings; nothing the browser sends can change it, and on Vercel `NODE_ENV` is always production.
+
+## Part 21: Place order (the placeOrder server action)
+"Place order" now sends the order to our server. The server checks everything again, works out every price from the database, and saves the order with `create_order()` (Part 19). The customer sees **"Order #1001 placed"** and the cart is emptied. (Part 22 replaces that message with a real confirmation page.)
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/orders/actions.ts` | Application | **New.** `placeOrder()`: the Server Action with every ordering rule (steps below). |
+| `src/lib/supabase/admin.ts` | Application (server only) | **New.** `createAdminClient()`: a connection with the **secret key** (`SUPABASE_SECRET_KEY`), used ONLY to run `create_order()`. |
+| `src/components/CheckoutForm.tsx` | Presentation | The button is connected: "Placing order…" while waiting, red box with what changed, Order ID on success, cart cleared. |
+| `src/lib/order-rules.ts` | Application | `checkRequestedTime()` now also refuses times that aren't on a 15-minute step. |
+
+### What placeOrder checks, in order
+1. **Who:** a logged-in **customer**. Their id comes from the signed login cookie, never from the browser.
+2. **Shape:** every field has the right type; quantity 1–10; note ≤ 200 characters; each extra at most once; delivery has a location, pickup doesn't.
+3. **Fresh data:** reads menu items, extras and the delivery location straight from the database (not the ~1-minute cached copy).
+4. **Each line:** item exists and is available; the size is really offered; extras only on food and available; the **real** price is used.
+5. **Delivery:** location still active; fee from the database.
+   - If anything in 4–5 changed since it was added to the cart → **refuse, list every change, leave the cart alone** (decision).
+6. **Time:** lead time from the fresh "made to order" flags; hours (or test hours, laptop only), same day, 15-minute steps.
+7. **Save:** `create_order()` via the secret key: the whole order in one transaction, or nothing.
+
+### Key concepts
+- **Never trust the browser:** the cart's prices are only *compared* (to say what changed), never *charged*. A customer who edits their cart to say J$1 gets "Fry Chicken (Large) is now J$1,200 (your cart says J$1)" and nothing is saved.
+- **Least privilege:** the secret key skips RLS, so we use it for as little as possible. Reading the menu uses the normal public key; only the save uses the secret key. `import "server-only"` stops browser code from ever importing it.
+- **Idempotency (doing it twice = doing it once):** each checkout gets one random id (`client_request_id`). A double tap or a retry after a bad connection sends the same id, and the database returns the first order instead of making a second.
+- **Server Action:** a function in a `"use server"` file. The browser calls it like a normal function, but it runs on the server and the code never reaches the browser.
+- **Prices are copied into the order:** `order_items` stores the name and price at the moment of ordering, so tomorrow's price change doesn't change today's order.
+
+### Possible lecturer questions
+- *What stops a customer from paying less by editing their cart?* The server reads every price from the database and refuses the order if the cart's prices don't match.
+- *Why is the secret key needed at all?* Customers aren't allowed to insert orders (RLS), and only our server may run `create_order()`. The server proves it's the server with the secret key.
+- *What happens if the Manager changes a price while I'm checking out?* The order is refused with a message saying exactly what changed; you update your cart and try again.
+
+### Fix: a second checkout still showed "Order #1001 placed"
+- **Symptom:** after placing an order, adding a new item and tapping Checkout showed the old "Order #1001 placed" message instead of the form.
+- **Cause:** with our Next.js setting (`cacheComponents`), leaving a page doesn't remove it. Next.js **hides** it (React's `<Activity>`) and keeps its state, so Back is instant. The checkout form still remembered `placedOrderId = 1001`.
+- **Fix:** in `CheckoutForm.tsx`, a `useLayoutEffect` **cleanup** (the function it returns) runs when the page is hidden. If an order was placed (`shouldResetRef`), it clears every choice and message, so the next visit starts fresh. Mid-checkout choices are still kept if you just pop over to the cart.
+- **Lesson:** in this Next.js version, a page's state survives navigation. Decide for each piece of state whether it should be kept (a half-filled form) or reset (a "done" message).

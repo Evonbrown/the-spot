@@ -167,6 +167,10 @@ export function checkRequestedTime(
   if (jamaicaDayStart(requested) !== jamaicaDayStart(now)) {
     return "Orders can only be placed for today.";
   }
+  // Decision: only the 15-minute times the page offers (e.g. 12:30, not 12:37).
+  if (requested % (SLOT_MINUTES * MINUTE) !== 0) {
+    return "Please choose one of the times offered.";
+  }
   const earliest = earliestReadyTime(now, leadMinutes, hours);
   if (requested < earliest) {
     return `That time is too soon. Please choose ${formatJamaicaTime(earliest)} or later.`;

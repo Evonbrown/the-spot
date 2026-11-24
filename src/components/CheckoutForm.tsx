@@ -17,7 +17,10 @@
  *   - FR-04: the driver needs the customer's phone, so it's shown here.
  *   - Usability: the last step of Menu -> Cart -> Checkout.
  *
- * PART 20 ONLY: "Place order" is not connected yet (Part 21).
+ * PART 21: "Place order" sends the choices to the placeOrder Server Action
+ * (src/lib/orders/actions.ts), which checks everything again and saves the
+ * order. On success the cart is emptied and the Order ID is shown (Part 22
+ * replaces that message with a real confirmation page).
  *
  * "use client" = it runs in the browser: the cart lives there, and the form
  * reacts to every choice.
@@ -25,8 +28,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useCart } from "@/components/CartProvider";
+import { placeOrder, type PlaceOrderResult } from "@/lib/orders/actions";
 import { useIsBrowser, useNow } from "@/lib/browser-hooks";
 import { cartSubtotal, describeLine, lineTotal } from "@/lib/cart";
 import { formatPrice } from "@/lib/menu-helpers";
@@ -57,6 +61,23 @@ type Props = {
 const choiceClass =
   "flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-stone-300 bg-white p-3 has-[:checked]:border-brand has-[:checked]:bg-orange-50";
 
+/*
+ * makeRequestId() -> a random id like "3f2a9c1e-8b7d-4e6f-a1b2-c3d4e5f60718"
+ * (the "UUID" format the database column client_request_id expects).
+ * WHY? If "Place order" is sent twice (double tap, or a retry after a bad
+ * connection), both carry the SAME id, and the database returns the first
+ * order instead of saving a second one.
+ * We build it from crypto.getRandomValues (works on plain http too, e.g.
+ * testing on a phone at home), not crypto.randomUUID (https only).
+ */
+function makeRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // marks it as a "version 4" (random) UUID
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // the standard "variant" bits
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export default function CheckoutForm({
   customerName,
   phone,
@@ -67,7 +88,7 @@ export default function CheckoutForm({
 }: Props) {
   const isBrowser = useIsBrowser();
   const now = useNow();
-  const { lines } = useCart();
+  const { lines, clearCart } = useCart();
 
   // ---- The customer's choices -------------------------------------------------
   // Nothing pre-chosen for pickup/delivery and payment, so nobody orders the
@@ -77,6 +98,70 @@ export default function CheckoutForm({
   const [timeChoice, setTimeChoice] = useState<"ASAP" | "LATER">("ASAP");
   const [slot, setSlot] = useState<number | null>(null);
   const [payment, setPayment] = useState<PaymentMethod | null>(null);
+
+  // ---- Sending the order (Part 21) ---------------------------------------------
+  // isPending = true while the server is working: the button shows
+  // "Placing order…" and can't be pressed again.
+  const [isPending, startTransition] = useTransition();
+  // The server's last "no" (error + list of changes), shown above the button.
+  const [failure, setFailure] = useState<Extract<PlaceOrderResult, { ok: false }> | null>(null);
+  // The new Order ID once the order is saved.
+  const [placedOrderId, setPlacedOrderId] = useState<number | null>(null);
+  // The checkout's request id. useRef = a value React keeps between drawings
+  // WITHOUT redrawing when it changes. Made on the first tap and kept for
+  // retries, so a repeated tap can never create a second order.
+  const requestIdRef = useRef<string | null>(null);
+  // true once an order has been placed: the form must start FRESH next time.
+  const shouldResetRef = useRef(false);
+
+  /*
+   * Start fresh after an order (bug fix).
+   * WHY? With our Next.js setting (cacheComponents), leaving a page does NOT
+   * remove it: Next.js HIDES it and keeps its state, so the Back button is
+   * instant. Without this, coming back to /checkout for a SECOND order still
+   * showed "Order #1001 placed".
+   * HOW: the function returned from useLayoutEffect ("cleanup") runs when the
+   * page is hidden. If an order was placed, we clear every choice and message
+   * there, so the next visit shows an empty checkout form.
+   * Only AFTER an order: if the customer pops over to the cart mid-checkout,
+   * their choices are kept (that's the helpful side of keeping state).
+   * useLayoutEffect (not useEffect) so it happens before the page is hidden,
+   * with no flash of the old message. (Pattern from the Next.js guide
+   * "Preserving UI state".)
+   */
+  useLayoutEffect(() => {
+    return () => {
+      if (!shouldResetRef.current) return;
+      shouldResetRef.current = false;
+      setPlacedOrderId(null);
+      setFailure(null);
+      setFulfilment(null);
+      setLocationId(null);
+      setTimeChoice("ASAP");
+      setSlot(null);
+      setPayment(null);
+    };
+  }, []);
+
+  // 0. Order saved: show the Order ID (checked BEFORE "empty cart", because
+  //    the cart was just emptied). Part 22 replaces this with a real page.
+  if (placedOrderId !== null) {
+    return (
+      <div role="status" className="mt-6 rounded-xl bg-white p-6 text-center shadow-sm">
+        <p className="text-2xl font-extrabold">Order #{placedOrderId} placed</p>
+        {/* SAF-1: the Order ID is confirmed before the food is handed over. */}
+        <p className="mt-2 text-stone-600">
+          Please keep this number. We&apos;ll ask for it when you get your food.
+        </p>
+        <Link
+          href="/menu"
+          className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-brand px-5 font-semibold text-white hover:bg-brand-dark"
+        >
+          Back to the menu
+        </Link>
+      </div>
+    );
+  }
 
   // 1. Not in the browser yet: grey placeholder (the cart and clock live here).
   if (!isBrowser || now === 0) {
@@ -131,6 +216,60 @@ export default function CheckoutForm({
   if (fulfilment === "DELIVERY" && !location) missing.push("Choose where to deliver.");
   if (timeChoice === "LATER" && chosenSlot === null) missing.push("Choose a time.");
   if (!payment) missing.push("Choose how to pay.");
+
+  const canPlace = openToday && missing.length === 0 && !isPending;
+
+  /*
+   * handlePlaceOrder(): send the choices to the server (placeOrder).
+   * We send what the customer CHOSE plus the prices the page SHOWED. The server
+   * never charges the shown prices: it only compares them, to say what changed.
+   * startTransition lets React keep the page responsive while waiting, and
+   * gives us isPending.
+   */
+  function handlePlaceOrder() {
+    if (!canPlace || !fulfilment || !payment) return;
+    requestIdRef.current ??= makeRequestId(); // "??=" = only if not made yet
+    setFailure(null);
+
+    const input = {
+      clientRequestId: requestIdRef.current,
+      fulfilment,
+      deliveryLocationId: fulfilment === "DELIVERY" ? locationId : null,
+      shownDeliveryFee: deliveryFee,
+      timeChoice,
+      requestedTime: timeChoice === "LATER" ? chosenSlot : null,
+      paymentMethod: payment,
+      lines: lines.map((line) => ({
+        itemId: line.itemId,
+        name: line.name,
+        size: line.size,
+        unitPrice: line.unitPrice,
+        extras: line.extras,
+        note: line.note,
+        quantity: line.quantity,
+      })),
+    };
+
+    startTransition(async () => {
+      try {
+        const result = await placeOrder(input);
+        if (result.ok) {
+          // Decision: the cart is cleared after an order is placed.
+          clearCart();
+          requestIdRef.current = null; // the next order gets a new id
+          shouldResetRef.current = true; // start fresh when the customer leaves this page
+          setPlacedOrderId(result.orderId);
+        } else {
+          // Nothing was saved, so the same id is safe to reuse for a retry.
+          setFailure(result);
+        }
+      } catch {
+        // The request itself failed (e.g. no internet). The order MAY have
+        // reached the server, so we keep the same id: a retry can't double it.
+        setFailure({ ok: false, error: "We couldn't reach the server. Check your connection and try again." });
+      }
+    });
+  }
 
   return (
     // PHONES: everything stacked. WIDE SCREENS: choices left, summary right.
@@ -398,15 +537,35 @@ export default function CheckoutForm({
           </ul>
         )}
 
-        {/* PART 20: not connected yet. Part 21 sends the order to the server. */}
+        {/* The server said no: why, and (decision) EXACTLY what changed.
+            role="alert" makes screen readers read it out at once. */}
+        {failure && (
+          <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-900">
+            <p className="font-semibold">{failure.error}</p>
+            {failure.changes && (
+              <>
+                <ul className="mt-2 list-disc pl-5">
+                  {failure.changes.map((change) => (
+                    <li key={change}>{change}</li>
+                  ))}
+                </ul>
+                <Link href="/cart" className="mt-2 inline-block font-semibold underline">
+                  Go to your cart
+                </Link>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Part 21: sends the order to the server (placeOrder). */}
         <button
           type="button"
-          disabled
-          className="mt-4 min-h-12 w-full rounded-xl bg-brand font-bold text-white disabled:cursor-not-allowed disabled:bg-stone-400"
+          onClick={handlePlaceOrder}
+          disabled={!canPlace}
+          className="mt-4 min-h-12 w-full rounded-xl bg-brand font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
         >
-          Place order
+          {isPending ? "Placing order…" : "Place order"}
         </button>
-        <p className="mt-2 text-center text-xs text-stone-500">Placing orders comes in Part 21.</p>
       </aside>
     </div>
   );
