@@ -94,9 +94,14 @@ export default function OrderLiveRefresh({ channelName, orderId, customerId, ref
       // 1. THE FIX: give Realtime the logged-in user's token BEFORE joining,
       //    so it knows who is listening (and RLS lets us read our orders).
       //    getSession() reads the login cookie (and renews an old token).
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
       if (cancelled) return;
-      await supabase.realtime.setAuth(data.session?.access_token ?? null);
+      if (error || !data.session?.access_token) {
+        if (error) console.error("Live updates could not read session:", error.message);
+        setLive("error");
+        return;
+      }
+      await supabase.realtime.setAuth(data.session.access_token);
       if (cancelled) return;
 
       // 2. Join and listen.
@@ -110,17 +115,21 @@ export default function OrderLiveRefresh({ channelName, orderId, customerId, ref
             table: "orders",
             ...(filter !== undefined ? { filter } : {}),
           },
-          () => router.refresh()
+          () => {
+            if (!cancelled) router.refresh();
+          }
         )
         // The server's own notes about this subscription. "status: error" =
         // it REFUSED to send us changes (e.g. not allowed to read orders).
         .on("system", {}, (message: { status?: string; message?: string }) => {
+          if (cancelled) return;
           if (message?.status === "error") {
             console.error("Live updates were refused:", message.message);
             setLive("error");
           }
         })
         .subscribe((status) => {
+          if (cancelled) return;
           if (status === "SUBSCRIBED") {
             // Don't hide an "error" the server already sent.
             setLive((current) => (current === "error" ? current : "live"));
@@ -146,18 +155,20 @@ export default function OrderLiveRefresh({ channelName, orderId, customerId, ref
   }, [channelName, orderId, customerId, router]);
 
   /*
-   * Step 32: the extra timed refresh (driver screen only), and a refresh when
-   * the person comes BACK to the tab or app (phones pause hidden pages).
+   * Refresh when the person comes BACK to a backgrounded tab or app (phones
+   * pause hidden pages and WebSockets), plus an optional timed refresh
+   * (used on the driver and supervisor screens).
    */
   useEffect(() => {
-    if (!refreshEverySeconds) return;
-    const timer = setInterval(() => router.refresh(), refreshEverySeconds * 1000);
+    const timer = refreshEverySeconds
+      ? setInterval(() => router.refresh(), refreshEverySeconds * 1000)
+      : null;
     const onVisible = () => {
       if (document.visibilityState === "visible") router.refresh();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refreshEverySeconds, router]);

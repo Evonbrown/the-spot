@@ -154,11 +154,15 @@ export async function logIn(
   // Send each role to its own screen (e.g. counter_staff -> /staff).
   // We read the role from the database (RLS lets a user read their own profile),
   // never from anything the browser sent.
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", data.user.id)
-    .single();
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("logIn: could not read user role:", profileError.message);
+  }
 
   const role = profile?.role as UserRole | undefined;
 
@@ -176,6 +180,9 @@ export async function logIn(
  */
 export async function logOut() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("logOut: signOut failed:", error.message);
+  }
   redirect("/");
 }

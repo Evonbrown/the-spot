@@ -42,16 +42,24 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   await connection(); // login/role info must be worked out fresh on every request
   const supabase = await createClient();
 
-  const { data: claimsData } = await supabase.auth.getClaims();
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  if (claimsError) {
+    console.error("getCurrentProfile: could not read auth claims:", claimsError.message);
+    return null;
+  }
   const claims = claimsData?.claims;
   if (!claims) return null; // nobody is logged in
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id, full_name, phone, role")
     .eq("id", claims.sub) // "sub" (subject) = the logged-in user's id
-    .single();
+    .maybeSingle();
 
+  if (profileError) {
+    console.error("getCurrentProfile: could not read profile:", profileError.message);
+    return null;
+  }
   if (!profile) return null;
 
   return { ...profile, email: claims.email ?? "" } as Profile;
