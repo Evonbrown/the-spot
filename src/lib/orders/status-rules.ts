@@ -10,8 +10,9 @@
  *        The buttons only SHOW the next step; this is what ENFORCES it,
  *        because a request can be sent without the buttons.
  *
- * ALSO HERE (Step 27, bottom of the file): checkPickupHandover(), the SAF-1
- * Order ID check and "cash received" check when a PICKUP order is completed.
+ * ALSO HERE (bottom of the file): checkHandover(), the SAF-1 Order ID check
+ * and "cash received" check when an order is completed: at the counter
+ * (pickup, Step 27) or by the driver (delivery, Step 33).
  *
  * HISTORY: Step 26 (Deja) added the minimum version. Step 28 (FR-05 SR-5.3 /
  * SR-5.5) made it the FULL rules below, with a clear message per mistake.
@@ -206,25 +207,42 @@ export function findReadyForPickupAt(
 }
 
 // =============================================================================
-// STEP 27 (Deja): the PICKUP HANDOVER check (SAF-1, FR-06)
+// THE HANDOVER check (SAF-1, FR-06): Step 27 (Deja) for pickup at the counter;
+// Step 33 shares it with the DRIVER's delivery handover, so both handovers
+// follow exactly the same rule.
 // =============================================================================
 
 /*
- * needsPickupHandover(order, newStatus) -> true when completing a PICKUP
- * order: then staff must type the Order ID the customer gives them (SAF-1:
- * "Order ID confirmed before handover").
- * Delivery orders are handed over by the driver (Build step 6), so they
- * don't need it here.
+ * needsHandover(newStatus) -> true when an order is being COMPLETED: then
+ * whoever hands it over must type the Order ID the customer gives them
+ * (SAF-1: "Order ID confirmed before handover"), and tick "cash received"
+ * for unpaid cash.
+ *   Pickup:   counter staff at the counter (Step 27).
+ *   Delivery: the driver at the drop-off (Step 33), or counter staff with
+ *             the backup button (decision B).
  */
-export function needsPickupHandover(order: { fulfilment: Fulfilment }, newStatus: OrderStatus): boolean {
-  return newStatus === "COMPLETED" && order.fulfilment === "PICKUP";
+export function needsHandover(newStatus: OrderStatus): boolean {
+  return newStatus === "COMPLETED";
 }
 
-/* What staff entered in the handover form. */
-export type PickupHandover = {
-  typedOrderId: string; // what the customer said / showed, typed by staff
+/* What was entered in the handover form. */
+export type Handover = {
+  typedOrderId: string; // what the customer said / showed, typed in
   cashReceived: boolean; // the "Cash received (J$X)" tick box
 };
+
+/*
+ * readHandover(raw) -> the handover form's values if they have the right
+ * shape, otherwise null. (The browser can send anything.) Used by both
+ * server actions (counter and driver).
+ */
+export function readHandover(raw: unknown): Handover | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.typedOrderId !== "string" || typeof value.cashReceived !== "boolean") return null;
+  if (value.typedOrderId.length > 20) return null; // an Order ID is never this long
+  return { typedOrderId: value.typedOrderId, cashReceived: value.cashReceived };
+}
 
 /* The order's payment, read FRESH from the database by the server. */
 export type PaymentForHandover = {
@@ -234,7 +252,7 @@ export type PaymentForHandover = {
 };
 
 /*
- * cashToCollect(payment) -> true if staff must collect cash at this handover:
+ * cashToCollect(payment) -> true if cash must be collected at this handover:
  * a CASH payment that is still UNPAID. (Lynk: the Supervisor verifies it
  * later, Build step 7. Already paid: nothing to collect.)
  */
@@ -243,18 +261,19 @@ export function cashToCollect(payment: PaymentForHandover | null): boolean {
 }
 
 /*
- * checkPickupHandover(orderId, payment, handover) -> null if OK, or a message.
- * Used by the SERVER (status-actions.ts), which decides, and by the page for
- * an instant hint before sending (the server checks again anyway).
+ * checkHandover(orderId, payment, handover) -> null if OK, or a message.
+ * Used by the SERVER (status-actions.ts, delivery-actions.ts), which decides,
+ * and by the pages for an instant hint before sending (the server checks
+ * again anyway).
  *   1. SAF-1: the typed Order ID must match this order. "#1004", " 1004 "
  *      and "1004" all count; anything else is blocked.
  *   2. FR-06: for an unpaid CASH order, "cash received" must be ticked, so the
  *      payment can be marked PAID in the same step.
  */
-export function checkPickupHandover(
+export function checkHandover(
   orderId: number,
   payment: PaymentForHandover | null,
-  handover: PickupHandover
+  handover: Handover
 ): string | null {
   // Tidy what was typed: remove spaces and a leading "#".
   const typed = handover.typedOrderId.trim().replace(/^#\s*/, "");

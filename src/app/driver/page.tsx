@@ -3,8 +3,9 @@
  *
  * WHAT: The Delivery Personnel screen (Step 32, FR-04 SR-4.2 view part /
  *       AC-2, TS-4.1.3): the deliveries assigned to the logged-in driver,
- *       "To deliver" (earliest ready-by first) and "Done today". View only:
- *       the Being delivered / Completed buttons come in Step 33.
+ *       "To deliver" (earliest ready-by first) and "Done today".
+ *       Step 33: each card has the driver's buttons: "Mark Being delivered"
+ *       and the handover (typed Order ID + "Cash received"), see DriverActions.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        getDriverDeliveries (Application layer) reads through RLS (Data

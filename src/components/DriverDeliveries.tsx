@@ -8,8 +8,9 @@
  *           drop-off location, ready-by, customer (tap to call), items,
  *           total, and whether CASH must be collected;
  *         - "Done today": a short list of today's completed / cancelled ones.
- *       VIEW ONLY: the Being delivered / Completed buttons and the Order ID
- *       check are Step 33.
+ *       Step 33: each card ends with the driver's buttons (DriverActions):
+ *       "Mark Being delivered" (with "Leaving now?") and the handover (typed
+ *       Order ID + "Cash received"). "Done today" shows when it was delivered.
  *
  * LAYER: Presentation. The data comes from getDriverDeliveries()
  *        (Application layer), read through RLS (Data layer, migration 0014).
@@ -18,6 +19,7 @@
  * kept live by <OrderLiveRefresh> (Realtime + a 30-second refresh).
  */
 
+import DriverActions from "@/components/DriverActions";
 import StatusBadge from "@/components/StatusBadge";
 import { formatPrice } from "@/lib/menu-helpers";
 import { formatJamaicaTime } from "@/lib/order-rules";
@@ -67,7 +69,11 @@ export default function DriverDeliveries({ toDeliver, doneToday }: Props) {
                 className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2"
               >
                 <span className="font-bold">#{delivery.orderId}</span>
-                <span className="text-sm text-stone-600">{delivery.dropOffLocation}</span>
+                <span className="text-sm text-stone-600">
+                  {delivery.dropOffLocation}
+                  {/* SR-4.3: when it was handed over (Step 33). */}
+                  {delivery.deliveredAt && ` · Delivered ${formatJamaicaTime(delivery.deliveredAt)}`}
+                </span>
                 <StatusBadge status={delivery.status} />
               </li>
             ))}
@@ -147,14 +153,17 @@ function DeliveryCard({ delivery }: { delivery: DriverDelivery }) {
         <span>Total</span>
         <span>{formatPrice(delivery.total)}</span>
       </p>
+
+      {/* Step 33: the ONE next step for the driver. */}
+      <DriverActions orderId={delivery.orderId} status={delivery.status} payment={delivery.payment} />
     </article>
   );
 }
 
 /*
  * PaymentLine: does the driver collect money?
- *   Cash, unpaid -> "Collect cash: J$1,400" (amber, stands out). Marking it
- *                   PAID when collected comes in Step 33 (FR-06).
+ *   Cash, unpaid -> "Collect cash: J$1,400" (amber, stands out). It becomes
+ *                   PAID at the handover (Step 33, FR-06).
  *   Lynk, unpaid -> don't collect: the Supervisor verifies Lynk payments.
  *   Already paid -> nothing to collect.
  */

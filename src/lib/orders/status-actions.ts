@@ -8,6 +8,9 @@
  *       Step 27: completing a PICKUP order also checks the Order ID the
  *       customer gives (SAF-1) and, for unpaid cash, "cash received"; the
  *       cash payment then becomes PAID in the same transaction (FR-06).
+ *       Step 33: for DELIVERY orders counter staff can't mark Being delivered
+ *       (the driver does); they keep Cancel and a backup "Complete" with the
+ *       same handover check (decision B).
  *       Step 28: the full rules (forward only, finished orders locked,
  *       Abandoned only 20+ minutes after Ready for pickup). The database
  *       trigger (migration 0011) checks them again when saving.
@@ -29,15 +32,16 @@
 import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
+import { counterDeliveryProblem } from "@/lib/orders/delivery-rules";
 import {
   cashToCollect,
-  checkPickupHandover,
+  checkHandover,
   checkStatusChange,
   findReadyForPickupAt,
-  needsPickupHandover,
+  needsHandover,
+  readHandover,
   type OrderForStatusCheck,
   type PaymentForHandover,
-  type PickupHandover,
 } from "@/lib/orders/status-rules";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -53,24 +57,12 @@ const SOMEONE_ELSE =
   "This order was just updated by someone else. The page now shows its latest status.";
 
 /*
- * readHandover(raw) -> the handover form's values if they have the right
- * shape, otherwise null. (The browser can send anything.)
- */
-function readHandover(raw: unknown): PickupHandover | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const value = raw as Record<string, unknown>;
-  if (typeof value.typedOrderId !== "string" || typeof value.cashReceived !== "boolean") return null;
-  if (value.typedOrderId.length > 20) return null; // an Order ID is never this long
-  return { typedOrderId: value.typedOrderId, cashReceived: value.cashReceived };
-}
-
-/*
  * updateOrderStatus(orderId, seenStatus, newStatus, handover?)
  *   seenStatus = the status the staff member SAW when they tapped. If the
  *   order has moved on since then (another staff member, another tab), we
  *   stop and say so, instead of applying the tap to a different step.
- *   handover   = Step 27: only when completing a PICKUP order: the Order ID
- *   the customer gave and the "cash received" tick.
+ *   handover   = when completing an order (pickup, Step 27; delivery backup,
+ *   Step 33): the Order ID the customer gave and the "cash received" tick.
  * Steps 1-5 below; nothing is saved unless all pass.
  */
 export async function updateOrderStatus(
@@ -138,12 +130,18 @@ export async function updateOrderStatus(
   const ruleError = checkStatusChange(current, rawNewStatus, Date.now());
   if (ruleError) return { ok: false, error: ruleError };
 
-  // ---- 4. PICKUP HANDOVER (Step 27, SAF-1 + FR-06) ----
-  // Completing a PICKUP order needs the customer's Order ID and, for unpaid
-  // cash, the "cash received" tick. The payment is read FRESH (staff may read
-  // payments, 0008); the browser's idea of it is never trusted.
+  // Step 33 (decision B): for DELIVERY orders the driver marks Being
+  // delivered; counter staff only keep Cancel and the backup "Complete".
+  const deliveryProblem = counterDeliveryProblem(current, rawNewStatus);
+  if (deliveryProblem) return { ok: false, error: deliveryProblem };
+
+  // ---- 4. HANDOVER (SAF-1 + FR-06) ----
+  // Completing an order (pickup at the counter, Step 27, or the delivery
+  // backup, Step 33) needs the customer's Order ID and, for unpaid cash, the
+  // "cash received" tick. The payment is read FRESH (staff may read payments,
+  // 0008); the browser's idea of it is never trusted.
   let cashReceived = false;
-  if (needsPickupHandover(current, rawNewStatus)) {
+  if (needsHandover(rawNewStatus)) {
     const handover = readHandover(rawHandover);
     if (!handover) return { ok: false, error: "Type the Order ID the customer gives you." };
 
@@ -164,7 +162,7 @@ export async function updateOrderStatus(
         }
       : null;
 
-    const handoverError = checkPickupHandover(orderId, payment, handover);
+    const handoverError = checkHandover(orderId, payment, handover);
     if (handoverError) return { ok: false, error: handoverError };
 
     // Unpaid cash + ticked -> mark it PAID in the same transaction.

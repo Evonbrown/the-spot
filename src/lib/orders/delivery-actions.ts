@@ -1,10 +1,15 @@
 /*
  * src/lib/orders/delivery-actions.ts
  *
- * WHAT: assignDriver(): the Server Action behind the "Assign driver" box on
- *       the staff order details page (Step 31, FR-04 SR-4.1 / AC-1,
- *       TS-4.1.2). It assigns a delivery order to a driver, or changes the
- *       driver, saving it with the database function assign_delivery().
+ * WHAT: Two Server Actions for deliveries (FR-04):
+ *       assignDriver() (Step 31, SR-4.1 / AC-1, TS-4.1.2): behind the
+ *         "Assign driver" box on the staff order details page. It assigns a
+ *         delivery order to a driver, or changes the driver, saving it with
+ *         the database function assign_delivery().
+ *       updateDeliveryStatus() (Step 33, SR-4.2 / SR-4.3 / SR-4.4, SAF-1,
+ *         FR-06): behind the DRIVER's buttons: "Mark Being delivered" and the
+ *         handover (typed Order ID + "cash received"), saved with
+ *         driver_change_delivery_status() (migration 0015).
  *
  * LAYER: Application layer. The box (Presentation) only calls it; the rule
  *        is checkDriverAssignment() (delivery-rules.ts); the save is the
@@ -21,9 +26,17 @@
 "use server";
 
 import { getCurrentProfile } from "@/lib/auth/get-profile";
-import type { OrderStatus } from "@/lib/order-status";
+import { STATUS_LABELS, type OrderStatus, type PaymentMethod, type PaymentStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
-import { checkDriverAssignment } from "@/lib/orders/delivery-rules";
+import { checkDriverAssignment, checkDriverStatusChange } from "@/lib/orders/delivery-rules";
+import {
+  cashToCollect,
+  checkHandover,
+  checkStatusChange,
+  needsHandover,
+  readHandover,
+  type PaymentForHandover,
+} from "@/lib/orders/status-rules";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -128,6 +141,134 @@ export async function assignDriver(
     return { ok: false, error: "We couldn't save the driver. Please try again." };
   }
   if (saved !== true) return { ok: false, error: SOMEONE_ELSE };
+
+  return { ok: true };
+}
+
+
+// =============================================================================
+// Step 33: the DRIVER's buttons
+// =============================================================================
+
+/* What the driver's buttons get back: ok, or a message to show. */
+export type DeliveryStatusResult = { ok: true } | { ok: false; error: string };
+
+const ALL_STATUSES = Object.keys(STATUS_LABELS) as OrderStatus[];
+const isStatus = (value: unknown): value is OrderStatus =>
+  typeof value === "string" && (ALL_STATUSES as string[]).includes(value);
+
+const STATUS_CHANGED =
+  "This order was just updated by someone else. Your list now shows its latest status.";
+
+/*
+ * updateDeliveryStatus(orderId, seenStatus, newStatus, handover?)
+ *   seenStatus = the status the driver SAW (if it changed since, we stop).
+ *   newStatus  = BEING_DELIVERED ("Leaving now") or COMPLETED (handover).
+ *   handover   = for COMPLETED: the Order ID the customer gave and the
+ *                "Cash received (J$X)" tick.
+ * Steps 1-6 below; nothing is saved unless all pass.
+ */
+export async function updateDeliveryStatus(
+  rawOrderId: unknown,
+  rawSeenStatus: unknown,
+  rawNewStatus: unknown,
+  rawHandover?: unknown
+): Promise<DeliveryStatusResult> {
+  // ---- 1. WHO: delivery staff only ----
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Please log in again." };
+  if (profile.role !== "delivery_personnel") {
+    return { ok: false, error: "Only delivery staff can use these buttons." };
+  }
+
+  // ---- 2. SHAPE ----
+  if (!Number.isSafeInteger(rawOrderId) || (rawOrderId as number) <= 0) {
+    return { ok: false, error: "That order number isn't valid." };
+  }
+  if (!isStatus(rawSeenStatus) || !isStatus(rawNewStatus)) {
+    return { ok: false, error: "That status isn't valid." };
+  }
+  const orderId = rawOrderId as number;
+
+  // ---- 3. FRESH READ with the driver's OWN login (RLS, migration 0014:
+  //         only MY deliveries, their orders and payments) ----
+  const supabase = await createClient();
+  const { data, error: readError } = await supabase
+    .from("orders")
+    .select("status, fulfilment, deliveries ( driver_id ), payments ( method, status, amount )")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (readError) {
+    console.error("updateDeliveryStatus: could not read the order:", readError.message);
+    return { ok: false, error: "We couldn't reach the database. Please try again." };
+  }
+  // Not found = not (or no longer) assigned to me: RLS hides it.
+  if (!data) {
+    return { ok: false, error: `Order #${orderId} isn't assigned to you (any more). Your list will update in a moment.` };
+  }
+
+  type PaymentRow = { method: PaymentMethod; status: PaymentStatus; amount: number | string };
+  const row = data as unknown as {
+    status: OrderStatus;
+    fulfilment: Fulfilment;
+    deliveries: { driver_id: string } | { driver_id: string }[] | null;
+    payments: PaymentRow | PaymentRow[] | null;
+  };
+  const delivery = Array.isArray(row.deliveries) ? row.deliveries[0] : row.deliveries;
+  const paymentRow = Array.isArray(row.payments) ? row.payments[0] : row.payments;
+  const payment: PaymentForHandover | null = paymentRow
+    ? { method: paymentRow.method, status: paymentRow.status, amount: Number(paymentRow.amount) }
+    : null;
+
+  if (row.status !== rawSeenStatus) return { ok: false, error: STATUS_CHANGED };
+
+  // ---- 4. THE RULES ----
+  // a. what a DRIVER may do (my delivery; only Being delivered / Completed);
+  const driverError = checkDriverStatusChange(
+    { id: orderId, status: row.status, fulfilment: row.fulfilment },
+    rawNewStatus,
+    delivery?.driver_id === profile.id
+  );
+  if (driverError) return { ok: false, error: driverError };
+
+  // b. the normal status rules (Step 28: one step forward, no skipping).
+  //    hasDriver = true (it's mine); readyForPickupAt only matters for
+  //    Abandoned, which drivers can't choose.
+  const ruleError = checkStatusChange(
+    { id: orderId, status: row.status, fulfilment: row.fulfilment, readyForPickupAt: null, hasDriver: true },
+    rawNewStatus,
+    Date.now()
+  );
+  if (ruleError) return { ok: false, error: ruleError };
+
+  // ---- 5. HANDOVER (SAF-1 + FR-06), the same check as the counter's ----
+  let cashReceived = false;
+  if (needsHandover(rawNewStatus)) {
+    const handover = readHandover(rawHandover);
+    if (!handover) return { ok: false, error: "Type the Order ID the customer gives you." };
+    const handoverError = checkHandover(orderId, payment, handover);
+    if (handoverError) return { ok: false, error: handoverError };
+    // Unpaid cash + ticked -> PAID in the same transaction (paid_by = driver).
+    // (Lynk stays UNPAID: the Supervisor verifies it, Build step 7.)
+    cashReceived = cashToCollect(payment);
+  }
+
+  // ---- 6. SAVE (server only, one transaction; the function checks again) ----
+  const admin = createAdminClient();
+  const { data: changed, error: saveError } = await admin.rpc("driver_change_delivery_status", {
+    p_order_id: orderId,
+    p_expected_status: row.status,
+    p_new_status: rawNewStatus,
+    p_driver_id: profile.id, // from the login cookie, never from the browser
+    p_cash_received: cashReceived,
+  });
+
+  if (saveError) {
+    console.error("updateDeliveryStatus: driver_change_delivery_status failed:", saveError.message);
+    return { ok: false, error: "We couldn't save that. Please try again." };
+  }
+  if (changed !== true) return { ok: false, error: STATUS_CHANGED };
 
   return { ok: true };
 }

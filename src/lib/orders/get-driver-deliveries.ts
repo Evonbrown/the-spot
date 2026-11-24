@@ -40,6 +40,7 @@ export type DriverDelivery = {
   orderId: number;
   status: OrderStatus;
   dropOffLocation: string; // copied when it was assigned (Step 31)
+  deliveredAt: number | null; // Step 33: when the driver handed it over (SR-4.3)
   requestedTime: number; // "Ready by" (ms since 1970)
   isAsap: boolean;
   createdAt: number; // when the order was placed
@@ -66,6 +67,7 @@ export type DriverDeliveries = {
 type PaymentRow = { method: PaymentMethod; status: PaymentStatus; amount: number | string };
 type DeliveryRow = {
   drop_off_location: string;
+  delivered_at: string | null;
   orders: {
     id: number;
     status: OrderStatus;
@@ -92,7 +94,7 @@ type DeliveryRow = {
  * "orders!inner" = only deliveries whose order passes the filters we add on
  * "orders.status" / "orders.created_at" below.
  */
-const DELIVERY_COLUMNS = `drop_off_location,
+const DELIVERY_COLUMNS = `drop_off_location, delivered_at,
   orders!inner ( id, status, requested_time, is_asap, created_at, total,
     profiles ( full_name, phone ),
     payments ( method, status, amount ),
@@ -153,6 +155,7 @@ function toDriverDelivery(row: DeliveryRow): DriverDelivery {
     orderId: order.id,
     status: order.status,
     dropOffLocation: row.drop_off_location,
+    deliveredAt: row.delivered_at ? Date.parse(row.delivered_at) : null,
     requestedTime: Date.parse(order.requested_time),
     isAsap: order.is_asap,
     createdAt: Date.parse(order.created_at),

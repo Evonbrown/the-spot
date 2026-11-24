@@ -1230,3 +1230,40 @@ Verified in the headless browser: the join now carries an `authenticated` token,
 - *Why did the page say "Live" when it wasn't?* The first reply said "ok"; the refusal came a moment later in a separate "system" message we weren't listening to. Now we are.
 - *Can a driver see other drivers' deliveries?* No: RLS only returns deliveries (and their orders, items, payments, customers) where driver_id is the logged-in driver (tested in blocks 2-4).
 - *How does the driver know to collect cash?* The card shows "Collect cash: J$X" for unpaid cash orders; Lynk orders say not to collect.
+
+## Step 33: The driver's buttons: Being delivered + handover (FR-04 SR-4.2 / SR-4.3 / SR-4.4, AC-2-AC-4, SAF-1, FR-06)
+Each delivery card on `/driver` now has the driver's **one next step**:
+| Order status | The driver sees |
+|---|---|
+| Pending / In progress | "Not ready yet: wait for the counter" |
+| Ready for pickup | **Mark Being delivered**, then "Leaving now with order #1004? **Yes, leaving now** / Not yet" (statuses can't go back, so a mis-tap mustn't count) |
+| Being delivered | **Hand over**: type the customer's Order ID (wrong number = blocked), tick "Cash received (J$X)" for unpaid cash, **Complete handover** |
+| Completed / Cancelled | moves to "Done today" ("Delivered 1:05 p.m.") |
+
+**Counter staff (decision B):** no "Mark Being delivered" for delivery orders any more (a note says the driver does it). They keep **Cancel** and a **"Complete delivery (backup)"** button with the same handover form, for when the driver can't (e.g. phone died), so no order is stuck "open" and blocks the daily closeout (FR-06).
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0015_driver_status.sql` | Data | **New.** `driver_change_delivery_status()` (server only: assigned driver only, only Being delivered / Completed, unpaid cash needs "cash received", then REUSES `change_order_status()`); trigger `orders_record_delivery_times` fills `picked_up_at` / `delivered_at`. |
+| `supabase/tests/0015_driver_status_checks.sql` | Data | **New.** 9 checks: Being delivered + picked_up_at; not my delivery; too early; cash handover → PAID by driver + delivered_at; cash not confirmed refused; Lynk stays unpaid; no skipping; counter backup; nobody can call it directly. |
+| `src/lib/orders/delivery-rules.ts` | Application | **Added** `checkDriverStatusChange()`, `counterDeliveryProblem()`. |
+| `src/lib/orders/delivery-actions.ts` | Application | **Added** `updateDeliveryStatus()` (the driver's Server Action). |
+| `src/lib/orders/status-rules.ts` | Application | The handover check is now SHARED: `checkHandover()`, `needsHandover()`, `readHandover()` (were pickup-only). |
+| `src/lib/orders/status-actions.ts` | Application | Counter: no Being delivered for delivery orders; Completed for delivery = backup with the handover check. |
+| `src/components/DriverActions.tsx` | Presentation (browser) | **New.** The driver's buttons, "Leaving now?" and the handover form. |
+| `src/components/StatusButtons.tsx` | Presentation | Note instead of "Mark Being delivered"; "Complete delivery (backup)". |
+| `src/components/DriverDeliveries.tsx`, `get-driver-deliveries.ts`, `src/app/driver/page.tsx` | Presentation / Application | Buttons on each card; "Delivered H:MM" in Done today. |
+
+### Key concepts
+- **Reuse instead of copy:** the driver's save calls the SAME `change_order_status()` as the counter, so the history row, cash PAID (paid_at, paid_by), the Step 28 rules trigger, the "needs a driver" trigger and the notifications all work for drivers with no new code. The handover check is the SAME function at the counter and at the drop-off.
+- **Layers again:** page (quick hint) → server action (who + my delivery + rules + typed Order ID) → database function (assigned driver + cash rule) → triggers (status rules, times).
+- **Times recorded by a trigger:** `picked_up_at` / `delivered_at` are filled when the STATUS changes, so they're right whichever path made the change (driver or counter backup).
+- **Who received the cash:** `payments.paid_by` is the driver (or the counter staff member for the backup). FR-06 closeout can later compare cash per person.
+- **SAF-1 is a server check:** only the server knows what the driver typed; the database can't, so the typed Order ID is checked in `checkHandover()` on the server (and as a hint on the page).
+
+### Possible lecturer questions
+- *What stops a driver completing someone else's delivery?* RLS hides other drivers' orders, the server checks "is it mine", and the database function checks the assigned driver again (tested in block 2).
+- *What if the driver forgets to collect the cash?* They can't complete a cash order without ticking "Cash received", and the database refuses it too (block 5). That keeps FR-06 revenue correct.
+- *What if the driver's phone dies on the way?* Counter staff use "Complete delivery (backup)" with the same Order ID and cash checks, recorded under their name.
+- *How do you know how long a delivery took?* `deliveries.picked_up_at` and `delivered_at` (SR-4.3).

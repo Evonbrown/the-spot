@@ -244,7 +244,6 @@ function OrderDetails({ order, drivers }: { order: StaffOrderDetails; drivers: D
           fulfilment={order.fulfilment}
           payment={order.payment}
           readyForPickupAt={order.readyForPickupAt}
-          hasDriver={order.delivery !== null}
         />
       </section>
 

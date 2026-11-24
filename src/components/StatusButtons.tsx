@@ -10,12 +10,17 @@
  *         - Step 28: for a PICKUP order that is Ready for pickup, a hint
  *           "You can mark it Abandoned from 2:36 p.m.", and from that time a
  *           "Mark Abandoned" button (with "Are you sure?") (SR-5.5);
- *         - Step 31: for a DELIVERY order with no driver yet, "Assign a driver
- *           first" instead of "Mark Being delivered";
+ *         - Step 31/33: for a DELIVERY order, no "Mark Being delivered" (the
+ *           DRIVER marks it on their screen): only the note "The driver marks
+ *           order #X Being delivered on their own screen when they leave."
+ *           (Step 31 still refuses Being delivered without a driver: server
+ *           rule + database trigger.) Once it's Being delivered, a
+ *           BACKUP "Complete delivery (backup)" with the same handover form
+ *           (decision B, e.g. the driver's phone died);
  *         - nothing but "This order is finished" once it is finished.
  *
  * LAYER: Presentation. The next step comes from nextStatus() (order-status.ts)
- *        and the handover rule from checkPickupHandover() (status-rules.ts),
+ *        and the handover rule from checkHandover() (status-rules.ts),
  *        both shared with the server. Tapping calls the updateOrderStatus
  *        Server Action (Application layer), which checks again and saves.
  *
@@ -47,9 +52,9 @@ import { updateOrderStatus } from "@/lib/orders/status-actions";
 import {
   abandonAllowedFrom,
   cashToCollect,
-  checkPickupHandover,
+  checkHandover,
   formatAbandonTime,
-  needsPickupHandover,
+  needsHandover,
   type PaymentForHandover,
 } from "@/lib/orders/status-rules";
 
@@ -59,17 +64,9 @@ type Props = {
   fulfilment: Fulfilment;
   payment: PaymentForHandover | null; // for the handover form (Step 27)
   readyForPickupAt: number | null; // when it became Ready for pickup (Step 28)
-  hasDriver: boolean; // Step 31: a driver is assigned (delivery orders)
 };
 
-export default function StatusButtons({
-  orderId,
-  status,
-  fulfilment,
-  payment,
-  readyForPickupAt,
-  hasDriver,
-}: Props) {
+export default function StatusButtons({ orderId, status, fulfilment, payment, readyForPickupAt }: Props) {
   const router = useRouter();
   // isPending = true while the server works: buttons show "Saving…" and are
   // disabled, so a double tap can't send two changes.
@@ -132,12 +129,15 @@ export default function StatusButtons({
   }
 
   const next = nextStatus(status, fulfilment);
-  // Step 27: completing a PICKUP order goes through the handover form.
-  const isHandover = next !== null && needsPickupHandover({ fulfilment }, next);
+  // Completing ANY order goes through the handover form (Order ID + cash):
+  // pickup at the counter (Step 27), or the delivery BACKUP (Step 33).
+  const isHandover = next !== null && needsHandover(next);
+  const isDelivery = fulfilment === "DELIVERY";
   const collectCash = cashToCollect(payment);
-  // Step 31 (decision): "Mark Being delivered" only once a driver is assigned.
-  // (The server and the database check this too.)
-  const needsDriverFirst = next === "BEING_DELIVERED" && !hasDriver;
+  // Step 33 (decision B): for DELIVERY orders the DRIVER marks Being
+  // delivered on their own screen, so counter staff get a note, NOT a button
+  // (the server refuses it too). Pickup orders are not affected.
+  const waitingForDriver = isDelivery && next === "BEING_DELIVERED";
 
   /*
    * change(newStatus, handover?): ask the server to make the change.
@@ -171,7 +171,7 @@ export default function StatusButtons({
    */
   function completeHandover() {
     const handover = { typedOrderId, cashReceived };
-    const problem = checkPickupHandover(orderId, payment, handover);
+    const problem = checkHandover(orderId, payment, handover);
     if (problem) {
       setError(problem);
       return;
@@ -190,13 +190,17 @@ export default function StatusButtons({
   return (
     <div className="flex flex-col gap-3">
       {/* ---- The ONE next step (or the handover for pickup -> Completed) ---- */}
-      {needsDriverFirst && (
+      {/* Decision B: NO "Mark Being delivered" button here for delivery
+          orders, only this note (same words as the server's message in
+          counterDeliveryProblem, delivery-rules.ts). Whether a driver is
+          assigned yet is shown in the Delivery box above. */}
+      {waitingForDriver && (
         <p className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-950">
-          Assign a driver first (in the Delivery box above), then you can mark it Being delivered.
+          The driver marks order #{orderId} Being delivered on their own screen when they leave.
         </p>
       )}
 
-      {next && !isHandover && !needsDriverFirst && (
+      {next && !isHandover && !waitingForDriver && (
         <button
           type="button"
           onClick={() => change(next)}
@@ -207,6 +211,13 @@ export default function StatusButtons({
         </button>
       )}
 
+      {/* Step 33 (decision B): for DELIVERY this is only the BACKUP (e.g. the
+          driver's phone died); normally the driver completes it. */}
+      {isHandover && !handingOver && isDelivery && (
+        <p className="text-sm text-stone-600">
+          The driver normally completes this on their phone. Use the backup only if they can&apos;t.
+        </p>
+      )}
       {isHandover && !handingOver && (
         <button
           type="button"
@@ -217,9 +228,13 @@ export default function StatusButtons({
             setError(null);
           }}
           disabled={isPending}
-          className="min-h-12 w-full rounded-xl bg-brand px-4 font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
+          className={
+            isDelivery
+              ? "min-h-12 w-full rounded-xl border border-stone-400 bg-white px-4 font-semibold text-stone-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+              : "min-h-12 w-full rounded-xl bg-brand px-4 font-bold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-stone-400"
+          }
         >
-          Hand over order
+          {isDelivery ? "Complete delivery (backup)" : "Hand over order"}
         </button>
       )}
 
