@@ -33,6 +33,32 @@ const JAMAICA_OFFSET = -5 * HOUR;
 export const OPEN_HOUR = 11;
 export const CLOSE_HOUR = 19;
 
+/*
+ * OpeningHours: when orders can be ready, as MINUTES after midnight (Jamaica).
+ * The rule functions below take this as an optional last value. If it's left
+ * out they use STORE_HOURS, the real FR-01 hours, so normal code never has to
+ * think about it.
+ */
+export type OpeningHours = { openMinute: number; closeMinute: number };
+
+// The real hours (FR-01): 11:00 a.m. - 7:00 p.m.
+export const STORE_HOURS: OpeningHours = {
+  openMinute: OPEN_HOUR * 60,
+  closeMinute: CLOSE_HOUR * 60,
+};
+
+/*
+ * TEST ONLY: "open all day" (midnight to 11:45 p.m.), so we can try checkout at
+ * night on a laptop. Lead times and "same day only" still apply.
+ * It is only switched on by src/lib/test-settings.ts, which refuses to switch
+ * it on anywhere except `npm run dev`. Never use this value directly.
+ * (11:45 p.m., not midnight: midnight would already be TOMORROW.)
+ */
+export const TEST_ALL_DAY_HOURS: OpeningHours = {
+  openMinute: 0,
+  closeMinute: 23 * 60 + 45,
+};
+
 // Decision: "later today" times are offered in 15-minute steps.
 export const SLOT_MINUTES = 15;
 
@@ -60,12 +86,15 @@ function jamaicaDayStart(time: number): number {
   return Math.floor(shifted / DAY) * DAY - JAMAICA_OFFSET;
 }
 
-/* openingTime(now) / closingTime(now) -> today's 11:00 a.m. / 7:00 p.m. in Jamaica. */
-export function openingTime(now: number): number {
-  return jamaicaDayStart(now) + OPEN_HOUR * HOUR;
+/*
+ * openingTime(now) / closingTime(now) -> today's 11:00 a.m. / 7:00 p.m. in Jamaica.
+ * (Or the test hours, if those are passed in.)
+ */
+export function openingTime(now: number, hours: OpeningHours = STORE_HOURS): number {
+  return jamaicaDayStart(now) + hours.openMinute * MINUTE;
 }
-export function closingTime(now: number): number {
-  return jamaicaDayStart(now) + CLOSE_HOUR * HOUR;
+export function closingTime(now: number, hours: OpeningHours = STORE_HOURS): number {
+  return jamaicaDayStart(now) + hours.closeMinute * MINUTE;
 }
 
 /*
@@ -75,8 +104,12 @@ export function closingTime(now: number): number {
  * from 11:00. Example (delivery, 20 min):
  *   ordered at 12:05 -> 12:25        ordered at 9:30 a.m. -> 11:20 a.m.
  */
-export function earliestReadyTime(now: number, leadMinutes: number): number {
-  return Math.max(now, openingTime(now)) + leadMinutes * MINUTE;
+export function earliestReadyTime(
+  now: number,
+  leadMinutes: number,
+  hours: OpeningHours = STORE_HOURS
+): number {
+  return Math.max(now, openingTime(now, hours)) + leadMinutes * MINUTE;
 }
 
 /*
@@ -84,8 +117,12 @@ export function earliestReadyTime(now: number, leadMinutes: number): number {
  * after closing (e.g. 6:50 p.m. for a delivery). Same day only (decision),
  * so then the customer can't order until tomorrow.
  */
-export function canOrderToday(now: number, leadMinutes: number): boolean {
-  return earliestReadyTime(now, leadMinutes) <= closingTime(now);
+export function canOrderToday(
+  now: number,
+  leadMinutes: number,
+  hours: OpeningHours = STORE_HOURS
+): boolean {
+  return earliestReadyTime(now, leadMinutes, hours) <= closingTime(now, hours);
 }
 
 /*
@@ -95,9 +132,13 @@ export function canOrderToday(now: number, leadMinutes: number): boolean {
  * (Jamaica's offset is a whole number of hours, so 15-minute marks are the
  * same in UTC and Jamaica time.)
  */
-export function timeSlots(now: number, leadMinutes: number): number[] {
-  const earliest = earliestReadyTime(now, leadMinutes);
-  const close = closingTime(now);
+export function timeSlots(
+  now: number,
+  leadMinutes: number,
+  hours: OpeningHours = STORE_HOURS
+): number[] {
+  const earliest = earliestReadyTime(now, leadMinutes, hours);
+  const close = closingTime(now, hours);
   const slots: number[] = [];
   const step = SLOT_MINUTES * MINUTE;
   for (let t = Math.ceil(earliest / step) * step; t <= close; t += step) {
@@ -116,20 +157,23 @@ export function timeSlots(now: number, leadMinutes: number): number[] {
 export function checkRequestedTime(
   now: number,
   requested: number,
-  leadMinutes: number
+  leadMinutes: number,
+  hours: OpeningHours = STORE_HOURS
 ): string | null {
   if (!Number.isFinite(requested)) return "Please choose a time.";
-  if (!canOrderToday(now, leadMinutes)) {
+  if (!canOrderToday(now, leadMinutes, hours)) {
     return "Sorry, we're closed for orders today. We're open 11:00 a.m. – 7:00 p.m.";
   }
   if (jamaicaDayStart(requested) !== jamaicaDayStart(now)) {
     return "Orders can only be placed for today.";
   }
-  if (requested < earliestReadyTime(now, leadMinutes)) {
-    return `That time is too soon. Please choose ${formatJamaicaTime(earliestReadyTime(now, leadMinutes))} or later.`;
+  const earliest = earliestReadyTime(now, leadMinutes, hours);
+  if (requested < earliest) {
+    return `That time is too soon. Please choose ${formatJamaicaTime(earliest)} or later.`;
   }
-  if (requested > closingTime(now)) {
-    return "That time is after closing (7:00 p.m.). Please choose an earlier time.";
+  const close = closingTime(now, hours);
+  if (requested > close) {
+    return `That time is after closing (${formatJamaicaTime(close)}). Please choose an earlier time.`;
   }
   return null;
 }

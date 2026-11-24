@@ -37,6 +37,7 @@ import {
   leadTimeMinutes,
   timeSlots,
   type Fulfilment,
+  type OpeningHours,
 } from "@/lib/order-rules";
 import { formatDeliveryFee, OPENING_HOURS, type DeliveryLocation } from "@/lib/store-info";
 
@@ -47,6 +48,8 @@ type Props = {
   phone: string | null;
   locations: DeliveryLocation[]; // active delivery locations (FR-01)
   madeToOrderItemIds: number[]; // menu items that need 15 min for pickup (fries)
+  hours: OpeningHours; // FR-01 hours from the server (or "all day" when testing)
+  isTestHours: boolean; // true = test setting on: show the TEST MODE banner
 };
 
 // Shared look for the big choice boxes (radio buttons inside a label).
@@ -54,7 +57,14 @@ type Props = {
 const choiceClass =
   "flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-stone-300 bg-white p-3 has-[:checked]:border-brand has-[:checked]:bg-orange-50";
 
-export default function CheckoutForm({ customerName, phone, locations, madeToOrderItemIds }: Props) {
+export default function CheckoutForm({
+  customerName,
+  phone,
+  locations,
+  madeToOrderItemIds,
+  hours,
+  isTestHours,
+}: Props) {
   const isBrowser = useIsBrowser();
   const now = useNow();
   const { lines } = useCart();
@@ -99,9 +109,10 @@ export default function CheckoutForm({ customerName, phone, locations, madeToOrd
 
   // FR-01 lead time for the chosen way (pickup shown until they choose).
   const lead = leadTimeMinutes(fulfilment ?? "PICKUP", hasMadeToOrder);
-  const openToday = canOrderToday(now, lead);
-  const earliest = earliestReadyTime(now, lead);
-  const slots = timeSlots(now, lead);
+  // `hours` comes from the server: the real 11:00-7:00, or "all day" in test mode.
+  const openToday = canOrderToday(now, lead, hours);
+  const earliest = earliestReadyTime(now, lead, hours);
+  const slots = timeSlots(now, lead, hours);
   // If the chosen slot is no longer allowed (time moved on, or they switched to
   // delivery, which needs longer), treat it as not chosen.
   const chosenSlot = slot !== null && slots.includes(slot) ? slot : null;
@@ -125,6 +136,19 @@ export default function CheckoutForm({ customerName, phone, locations, madeToOrd
     // PHONES: everything stacked. WIDE SCREENS: choices left, summary right.
     <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
       <div className="flex flex-col gap-6 lg:col-span-2">
+        {/* TEST ONLY: loud warning while opening hours are ignored, so nobody
+            thinks the real site accepts orders at night. Never shown on the
+            live site (see src/lib/test-settings.ts). */}
+        {isTestHours && (
+          <p
+            role="status"
+            className="rounded-xl border-2 border-amber-500 bg-amber-100 p-3 text-sm font-semibold text-amber-950"
+          >
+            TEST MODE: opening hours are ignored (open all day). This only works with
+            `npm run dev` on your own computer.
+          </p>
+        )}
+
         {/* ---- Contact (FR-04: the driver needs the phone number) ---- */}
         <section className="rounded-xl bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold">Your details</h2>

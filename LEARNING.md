@@ -800,3 +800,28 @@ Supabase gives us **two keys**:
 - *What happens if I order fries for pickup?* The earliest time moves 15 minutes later; for delivery it's 20 minutes either way.
 - *Why Jamaica time in code instead of the computer's time?* The server runs on UTC; using the computer's time would make the shop "open" at the wrong hours.
 - *What if I'm logged out when I tap Checkout?* You're sent to log in (or sign up) and then returned to checkout; the address is checked so it can only send you somewhere on our site.
+
+## Test setting: ignore opening hours (laptop only)
+So we can test checkout at night, there is a **test-only** setting that makes The Spot "open all day" (midnight to 11:45 p.m.). Lead times and "same day only" still apply. It can **never** work on the live site.
+
+### How to use it
+1. In `.env.local` add the line `TEST_IGNORE_OPENING_HOURS=true`
+2. Stop the dev server (Ctrl + C) and run `npm run dev` again.
+3. Checkout now shows a yellow **TEST MODE** banner. To switch off: delete the line and restart.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/test-settings.ts` | Application (server only) | **New.** `isIgnoreOpeningHoursOn()` and `getOpeningHours()`: the ONE place that decides real hours vs test hours. |
+| `src/lib/order-rules.ts` | Application | Opening hours are now an optional value (`OpeningHours`) the rule functions accept. Left out = the real FR-01 hours (`STORE_HOURS`). |
+| `src/app/checkout/page.tsx` | Presentation | Asks the server which hours to use and passes them to the form. |
+| `src/components/CheckoutForm.tsx` | Presentation | Uses the hours it's given; shows the TEST MODE banner. |
+
+### Key concepts
+- **Two locks:** it only turns on if `NODE_ENV` is `"development"` (Next.js sets this itself: only `npm run dev`; Vercel is always `"production"`) **and** `TEST_IGNORE_OPENING_HOURS` is `"true"` (only in `.env.local`, which git ignores). Even a mistake in Vercel's settings can't open lock 1.
+- **Fail safe:** the value must be exactly `true`; a typo means "off", the real hours.
+- **Server decides, browser shows:** a variable without `NEXT_PUBLIC_` is invisible to the browser, so the server reads it and hands the hours to the page. Part 21's `placeOrder` will use the same `getOpeningHours()`, so what the page offers and what the server accepts always match.
+- **`import "server-only"`:** the build fails if browser code ever imports that file.
+
+### Possible lecturer questions
+- *Couldn't a customer turn test mode on?* No. It's read on the server from the server's own settings; nothing the browser sends can change it, and on Vercel `NODE_ENV` is always production.

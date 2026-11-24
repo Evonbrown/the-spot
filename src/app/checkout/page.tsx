@@ -24,6 +24,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { getDeliveryLocations } from "@/lib/delivery-locations";
 import { getMenuItems } from "@/lib/menu";
 import type { DeliveryLocation } from "@/lib/store-info";
+import { getOpeningHours, isIgnoreOpeningHoursOn } from "@/lib/test-settings";
 
 export const metadata: Metadata = {
   title: "Checkout",
@@ -53,6 +54,9 @@ export default function CheckoutPage() {
  * 2. Load the active delivery locations (FR-01) and which menu items are made
  *    to order (FR-01 lead time). Both are the cached copies: good enough for
  *    SHOWING choices; the server re-checks with fresh data when ordering.
+ * 3. Work out which opening hours to use (the real ones, or "open all day"
+ *    only while testing on a laptop; see src/lib/test-settings.ts). This has
+ *    to happen HERE on the server, because the browser can't read the setting.
  */
 async function CheckoutContent() {
   const profile = await requireRole(["customer"], { returnTo: "/checkout" });
@@ -78,6 +82,8 @@ async function CheckoutContent() {
       phone={profile.phone}
       locations={locations}
       madeToOrderItemIds={madeToOrderItemIds}
+      hours={getOpeningHours()}
+      isTestHours={isIgnoreOpeningHoursOn()}
     />
   );
 }
