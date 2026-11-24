@@ -1181,7 +1181,52 @@ On the counter staff order details page, **delivery** orders now have a **Delive
 - *Can staff change the driver after the food has left?* No: only before Being delivered (server rule + database function).
 - *Why can't staff just edit the deliveries table?* Only SELECT is granted; every change goes through the server action and `assign_delivery()`, which only the server can run.
 
-## Known issues (to fix before the demo)
-- **Customer order page doesn't update live (since migration 0013).** When staff change an order's status, the customer's `/orders/[id]` page no longer changes by itself; after a manual refresh the data IS correct (status, progress line, messages). It worked in Steps 29-30.
-  - Already checked (Step 31): the order data and the "has a driver" logic are correct; Supabase Realtime itself connects (test subscription in ~0.5 s); the Supabase status page showed no Realtime incident; the production build passes; Step 31 did not change the customer page or `OrderLiveRefresh`, and 0013 did not change the `orders` policies or the Realtime publication.
-  - Next things to look at: what the live label on the customer page says ("● Live" / "Connecting…" / "Reconnecting…"), errors in the browser console, and whether Realtime still delivers `orders` changes to a CUSTOMER login (RLS check per listener) after 0013.
+## Known issues
+- ~~Customer order page doesn't update live (since migration 0013).~~ **FIXED in Step 32** (see "Step 32" below: the browser joined Realtime before the login token had loaded).
+
+## Step 32: The driver's screen + the "not live" fix (FR-04 SR-4.2 view part / AC-2, TS-4.1.3)
+
+### First: what was wrong with live updates (the known issue)
+**Symptom:** the customer's order page showed "● Live" but never changed when staff changed the status (data was right after a refresh).
+
+**How we found it:** a throwaway test customer and order (deleted afterwards), first in a small script, then in a real (headless) Edge browser on the running app:
+1. In the script, Realtime delivered the change to the customer in ~0.35 s, so the **database, RLS and Realtime were fine** (and migration 0013 was not the cause).
+2. In the browser, the Realtime server answered: *"Unable to subscribe to changes ... invalid column for filter id"*, and the browser's join message carried **no login token**.
+
+**The cause:** the Supabase browser client loads the login token from the cookies **in the background**. `OrderLiveRefresh` joined the channel **before** that finished (and in development React mounts it twice: join → leave → join, all before the token). Without a token, Realtime treats you as a **logged-out visitor** (`anon`), who may not read `orders` (RLS). With a filter like `id=eq.1004`, Realtime then REFUSES the subscription. Our label only looked at the first "ok" reply, so it still said "● Live". (It's a timing race, which is why it hadn't shown up before: it depends on how fast the token loads, e.g. a full page load vs arriving by a link inside the app.)
+
+**The fix (in `OrderLiveRefresh.tsx`):**
+1. read the session first (`supabase.auth.getSession()`) and hand the token to Realtime (`supabase.realtime.setAuth(token)`), THEN join;
+2. if the screen goes away while we're getting ready, don't join at all (`cancelled`);
+3. listen to the server's `system` messages: if it says `status: "error"`, the label shows **"Live updates off: refresh the page"** instead of lying.
+
+Verified in the headless browser: the join now carries an `authenticated` token, Realtime says "Subscribed to PostgreSQL", and the page went Pending → In progress by itself.
+
+### Then: the driver's screen
+`/driver` now shows the logged-in driver's deliveries:
+- **To deliver** (earliest ready-by first): Order ID, status, **drop-off location** (large), ready-by, **customer + "Call" link**, items (extras, notes), total, and the **money line**: "Collect cash: J$1,400" (cash, unpaid), "Paid by Lynk: don't collect money", or "Paid: nothing to collect".
+- **Done today**: today's Completed / Cancelled deliveries.
+- **Live**: Realtime (only the driver's own orders, by RLS) **plus a refresh every 30 seconds and when the driver comes back to the app**, because a driver who LOSES a delivery (moved to another driver) can no longer read that order, so Realtime can't tell them.
+- View only: the buttons and Order ID check come in Step 33.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/components/OrderLiveRefresh.tsx` | Presentation (browser) | **The fix** (token first, then join; "Live updates off" on a refused subscription) + optional `refreshEverySeconds` and refresh-on-return. |
+| `supabase/migrations/0014_driver_access.sql` | Data | **New.** Read-only RLS for drivers: own deliveries, those orders, items, extras, payments, and those customers' profiles. |
+| `supabase/tests/0014_driver_access_checks.sql` | Data | **New.** 7 checks: driver sees own; other driver sees none; no unassigned / pickup orders; reassignment moves access; no other profiles; can't write; others unchanged. |
+| `src/lib/orders/get-driver-deliveries.ts` | Application (server only) | **New.** The driver's deliveries in two groups (own login + our own driver_id filter). |
+| `src/components/DriverDeliveries.tsx` | Presentation | **New.** Cards, money line, Done today. |
+| `src/app/driver/page.tsx` | Presentation | Replaces the placeholder. |
+
+### Key concepts
+- **Who is listening matters to Realtime:** every Realtime subscription is checked against RLS as the person whose token it carries. No token = logged-out visitor.
+- **Race condition:** two things happen "at the same time" and the result depends on which finishes first (token loading vs joining). Fix it by making one wait for the other (`await`).
+- **An honest status label:** show what the server actually said, not what we hoped.
+- **RLS that follows the assignment:** a driver's access is "orders that have a delivery row with my driver_id". Change the driver and the access moves with it, with no extra code.
+- **Why a timed refresh too:** Realtime only tells you about rows you can STILL read. Losing access is invisible to it.
+
+### Possible lecturer questions
+- *Why did the page say "Live" when it wasn't?* The first reply said "ok"; the refusal came a moment later in a separate "system" message we weren't listening to. Now we are.
+- *Can a driver see other drivers' deliveries?* No: RLS only returns deliveries (and their orders, items, payments, customers) where driver_id is the logged-in driver (tested in blocks 2-4).
+- *How does the driver know to collect cash?* The card shows "Collect cash: J$X" for unpaid cash orders; Lynk orders say not to collect.
