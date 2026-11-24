@@ -20,14 +20,23 @@
  * PART 23 (FR-02): the "How to pay" box (PaymentInstructions): a SAMPLE
  * Lynk QR code with amount, reference and Lynk ID, or the cash message.
  *
+ * STEP 29 (FR-05 SR-5.1 / SR-5.2): the "Order status" box: the current
+ * status, one plain sentence, and a progress line (OrderProgress). It is
+ * LIVE: <OrderLiveRefresh orderId=...> listens to THIS order only, and when
+ * staff change the status the page re-draws itself within seconds, with no
+ * refresh (PR-2: within 5 s). Realtime checks RLS, so a customer only ever
+ * hears about their own orders.
+ *
  * NOT HERE YET:
- *   - Build step 5 (FR-05): the live order status.
+ *   - Step 30: notifications (Ready / Cancelled / Abandoned).
  *   - Payment status ("not paid yet"): decision, not shown for now.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import OrderLiveRefresh from "@/components/OrderLiveRefresh";
+import OrderProgress from "@/components/OrderProgress";
 import PaymentInstructions from "@/components/PaymentInstructions";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
@@ -155,6 +164,23 @@ function OrderInvoice({ order }: { order: OrderDetails }) {
         </p>
       </section>
 
+      {/* ---- Order status (Step 29, FR-05): live, no refresh needed ---- */}
+      <section className="mt-4 rounded-xl bg-white p-5 shadow-sm" aria-labelledby="status-title">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 id="status-title" className="text-lg font-bold">
+            Order status
+          </h2>
+          {/* Listens to THIS order only (and RLS: only if it's yours). */}
+          <OrderLiveRefresh channelName={`customer-order-${order.id}`} orderId={order.id} />
+        </div>
+        <OrderProgress
+          orderId={order.id}
+          status={order.status}
+          fulfilment={order.fulfilment}
+          locationName={order.deliveryLocation?.name ?? null}
+        />
+      </section>
+
       {/* ---- Pickup or delivery + time (FR-01) + payment method (FR-02) ---- */}
       <section className="mt-4 rounded-xl bg-white p-5 shadow-sm">
         {/* dl/dt/dd = a "description list": label + value pairs, which screen
@@ -244,8 +270,15 @@ function OrderInvoice({ order }: { order: OrderDetails }) {
         </div>
       </section>
 
-      <div className="text-center">
+      <div className="flex flex-wrap justify-center gap-x-4">
         <BackToMenu />
+        {/* Step 29: back to the list of all their orders. */}
+        <Link
+          href="/orders"
+          className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-5 font-semibold hover:bg-stone-50"
+        >
+          My orders
+        </Link>
       </div>
     </>
   );

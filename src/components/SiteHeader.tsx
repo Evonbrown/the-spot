@@ -2,8 +2,9 @@
  * src/components/SiteHeader.tsx
  *
  * WHAT: The top bar shown on every page: "The Spot" name (links to Home), a
- *       main link (Menu, or your own staff screen), the Cart link (visitors and
- *       customers only), and the account area (Log in, OR your name/role + Log out).
+ *       main link (Menu, or your own staff screen), "Orders" (customers only),
+ *       the Cart link (visitors and customers only), and the account area
+ *       (Log in, OR your name/role + Log out).
  * LAYER: Presentation. It gets the logged-in user from the Application layer
  *        (getCurrentProfile in src/lib/auth/get-profile.ts).
  *
@@ -60,7 +61,8 @@ function MenuLink() {
 /*
  * AccountArea (runs on the server)
  * Logged out -> "Menu", "Cart" and a "Log in" button (the log-in page links to sign-up).
- * Customer   -> "Menu", "Cart", their name + role, and "Log out".
+ * Customer   -> "Menu", "Orders" (My orders, Step 29), "Cart", their name +
+ *               role, and "Log out".
  * Staff role -> a link to THEIR OWN screen (e.g. "Queue") instead of "Menu",
  *               their name + role, and "Log out". NO cart (decision: staff
  *               don't order through the app).
@@ -96,9 +98,14 @@ async function AccountArea() {
           {screenLink}
         </Link>
       ) : (
-        // Customers: Menu + Cart. (Staff got their screen link above, and no cart.)
+        // Customers: Menu + Orders + Cart. (Staff got their screen link above,
+        // and no cart or orders.) Step 29: "Orders" opens "My orders"; the
+        // short word keeps the header on one line on small phones (decision).
         <>
           <MenuLink />
+          <Link href="/orders" className={linkClass}>
+            Orders
+          </Link>
           <CartLink className={linkClass} />
         </>
       )}

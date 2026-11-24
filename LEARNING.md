@@ -1080,3 +1080,37 @@ The status rules are now **complete and enforced twice**: by the server (with a 
 - *Why can't delivery orders be abandoned?* The food is with the driver, not waiting at the counter; SR-5.5 is about pickup orders that nobody collects.
 - *Can a manager "undo" a cancelled order in the SQL Editor?* No: the trigger runs for everyone, so finished orders stay finished.
 - *What happens to the money of an abandoned order?* Unpaid cash stays UNPAID, so FR-06 doesn't count it as revenue. A verified Lynk payment would need a refund (Supervisor, Build step 7).
+
+## Step 29: My orders + live order status for customers (FR-05 SR-5.1 / SR-5.2)
+Customers now have an **"Orders"** link in the header (customers only). It opens **"My orders"** (`/orders`): their own orders, newest first, each with Order ID, date/time, pickup or delivery, total and a status badge. Tapping one opens `/orders/1004`, which now starts with an **"Order status"** box: the status badge, **one plain sentence** (e.g. "Your food is ready. Show Order ID #1004 at the counter.") and a **progress line**. Both pages are **live**: when staff press a status button, the customer's screen changes within seconds, with no refresh.
+
+### The progress line
+```
+Pickup:    ✓ Pending  →  ✓ In progress  →  ● Ready for pickup  →  ○ Completed
+Delivery:  ✓ Pending  →  ✓ In progress  →  ✓ Ready for pickup  →  ● Being delivered  →  ○ Completed
+```
+✓ = done, ● = you are here, ○ = still to come. Cancelled / Abandoned: no line, just a clear box ("This order was cancelled. Questions? Please ask at the counter.").
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/app/orders/page.tsx` | Presentation | **New.** "My orders": customers only, newest first, empty state with a menu link, live. |
+| `src/lib/orders/get-my-orders.ts` | Application (server only) | **New.** `getMyOrders(customerId)`: the newest 50 of the customer's orders, read with the logged-in connection (RLS) + our own `customer_id` filter. |
+| `src/components/OrderProgress.tsx` | Presentation | **New.** Status badge + plain sentence + progress line (steps from `statusSteps()`), or the Cancelled/Abandoned box. |
+| `src/app/orders/[id]/page.tsx` | Presentation | The live "Order status" box; a "My orders" button at the bottom. |
+| `src/components/OrderLiveRefresh.tsx` | Presentation (browser) | **Added** `customerId` (filter `customer_id=eq.…`); comments explain why it's safe for customers. |
+| `src/components/SiteHeader.tsx` | Presentation | "Orders" link for customers. |
+
+No database change: customers could already read only their own orders (0006), and Realtime was already on for `orders` (0007).
+
+### Key concepts
+- **Realtime respects RLS:** before Supabase sends a change to a browser, it checks whether THAT logged-in person may read the row. A customer listening to `orders` only ever hears about their own orders. The filters (`id=eq.1004`, `customer_id=eq.…`) just make the list of messages shorter; RLS is the real lock.
+- **Three locks for "own orders only":** `requireRole(["customer"])` on the page, our own `.eq("customer_id", …)` in the query, and RLS in the database (and in Realtime).
+- **Live = "message → re-read":** the Realtime message only says "order 1004 changed"; the page then asks the server to rebuild itself (`router.refresh()`), reading fresh through RLS. The first load and every update are built the SAME way.
+- **One list of steps for everything:** the progress line uses the same `statusSteps()` as the staff rules and (the same lists as) the database trigger from Step 28, so the customer never sees a step that staff can't do.
+- **Accessible progress:** an `<ol>` with `aria-current="step"` on the current step, and hidden words ("done", "current step", "next") instead of relying on ✓ / ● / ○ or colour.
+
+### Possible lecturer questions
+- *Could a customer see someone else's order by typing /orders/1005?* No: RLS hides it, our query also filters by their id, and the page shows "Order not found" (the same message as for a number that doesn't exist).
+- *How does the status reach the customer within 5 seconds (PR-2)?* Staff press a button → the database row changes → Supabase Realtime sends a message to the customer's browser (usually under a second) → the page re-reads and re-draws.
+- *Why not send the new status in the message and show it directly?* The message only holds the orders row. Re-reading keeps ONE way of building the page, and every read goes through RLS.
