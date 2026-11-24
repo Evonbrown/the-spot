@@ -19,8 +19,8 @@
  *
  * PART 21: "Place order" sends the choices to the placeOrder Server Action
  * (src/lib/orders/actions.ts), which checks everything again and saves the
- * order. On success the cart is emptied and the Order ID is shown (Part 22
- * replaces that message with a real confirmation page).
+ * order. On success the cart is emptied and the customer goes to the
+ * confirmation page /orders/<Order ID> (Part 22).
  *
  * "use client" = it runs in the browser: the cart lives there, and the form
  * reacts to every choice.
@@ -28,6 +28,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useCart } from "@/components/CartProvider";
 import { placeOrder, type PlaceOrderResult } from "@/lib/orders/actions";
@@ -89,6 +90,8 @@ export default function CheckoutForm({
   const isBrowser = useIsBrowser();
   const now = useNow();
   const { lines, clearCart } = useCart();
+  // The Next.js router: lets code move to another page (Part 22).
+  const router = useRouter();
 
   // ---- The customer's choices -------------------------------------------------
   // Nothing pre-chosen for pickup/delivery and payment, so nobody orders the
@@ -143,22 +146,14 @@ export default function CheckoutForm({
     };
   }, []);
 
-  // 0. Order saved: show the Order ID (checked BEFORE "empty cart", because
-  //    the cart was just emptied). Part 22 replaces this with a real page.
+  // 0. Order saved: a short message for the moment while the confirmation
+  //    page opens. Checked BEFORE "empty cart", because the cart was just
+  //    emptied and we don't want "Your cart is empty" to flash up.
   if (placedOrderId !== null) {
     return (
       <div role="status" className="mt-6 rounded-xl bg-white p-6 text-center shadow-sm">
         <p className="text-2xl font-extrabold">Order #{placedOrderId} placed</p>
-        {/* SAF-1: the Order ID is confirmed before the food is handed over. */}
-        <p className="mt-2 text-stone-600">
-          Please keep this number. We&apos;ll ask for it when you get your food.
-        </p>
-        <Link
-          href="/menu"
-          className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-brand px-5 font-semibold text-white hover:bg-brand-dark"
-        >
-          Back to the menu
-        </Link>
+        <p className="mt-2 text-stone-600">Opening your order…</p>
       </div>
     );
   }
@@ -259,6 +254,10 @@ export default function CheckoutForm({
           requestIdRef.current = null; // the next order gets a new id
           shouldResetRef.current = true; // start fresh when the customer leaves this page
           setPlacedOrderId(result.orderId);
+          // Part 22: go to the confirmation page. "replace" (not "push") swaps
+          // the finished checkout out of the browser history, so Back from
+          // the confirmation doesn't return to a used-up checkout.
+          router.replace(`/orders/${result.orderId}`);
         } else {
           // Nothing was saved, so the same id is safe to reuse for a retry.
           setFailure(result);

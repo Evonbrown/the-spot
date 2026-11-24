@@ -864,3 +864,28 @@ So we can test checkout at night, there is a **test-only** setting that makes Th
 - **Cause:** with our Next.js setting (`cacheComponents`), leaving a page doesn't remove it. Next.js **hides** it (React's `<Activity>`) and keeps its state, so Back is instant. The checkout form still remembered `placedOrderId = 1001`.
 - **Fix:** in `CheckoutForm.tsx`, a `useLayoutEffect` **cleanup** (the function it returns) runs when the page is hidden. If an order was placed (`shouldResetRef`), it clears every choice and message, so the next visit starts fresh. Mid-checkout choices are still kept if you just pop over to the cart.
 - **Lesson:** in this Next.js version, a page's state survives navigation. Decide for each piece of state whether it should be kept (a half-filled form) or reset (a "done" message).
+
+## Part 22: The order confirmation page ("invoice")
+After "Place order", the customer goes to **`/orders/1001`**. It shows the **Order ID** (big, for SAF-1), when it was placed, **pickup or delivery** (and where), **when** it will be ready, every **item** (size, extras with prices, meal note), the **totals** and the **payment method**. The Lynk QR code and payment instructions come in Part 23 (Junelle); live status comes in Build step 5.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/app/orders/[id]/page.tsx` | Presentation | **New.** The page. Customers only (`requireRole`, with `returnTo` so a logged-out visitor comes back after logging in). Shows "Order not found" for a wrong, missing or someone else's number. |
+| `src/lib/orders/get-order.ts` | Application (server only) | **New.** `getOrderForCustomer(id, customerId)`: ONE query that brings the order with its location, payment, items and extras. Uses the **logged-in** connection, so RLS applies. |
+| `src/lib/order-rules.ts` | Application | **New helper** `formatJamaicaDateTime()`: "Mon 23 Nov, 12:05 p.m." |
+| `src/components/CheckoutForm.tsx` | Presentation | On success: empty the cart, then `router.replace("/orders/<id>")`. |
+| `CLAUDE.md` | n/a | Records the Part 22 / Part 23 split and the page decisions. |
+
+### Key concepts
+- **Dynamic route:** a folder named `[id]` makes ONE page file serve every order: `/orders/1001`, `/orders/1002`... The part after `/orders/` arrives as `params.id`. In this Next.js version `params` is only known when someone visits, so the page uses it inside `<Suspense>`.
+- **RLS does the hiding, not the page:** we read with the customer's own login, so the database only returns THEIR orders. We also add `.eq("customer_id", …)` ourselves: two locks. The secret key is NOT used here, because it would skip RLS.
+- **Same message for "not yours" and "doesn't exist":** otherwise someone could try numbers and learn which orders exist.
+- **Embedded select:** `orders.select("…, order_items ( …, order_item_customizations ( … ) ), payments ( method )")` lets Supabase follow the foreign keys and return everything in one trip to the database.
+- **Prices from the order, not the menu:** the page shows the prices saved when the order was placed, so a later menu change doesn't rewrite the invoice.
+- **`router.replace` vs `router.push`:** replace swaps the current page in the history, so Back from the confirmation skips the used-up checkout.
+
+### Possible lecturer questions
+- *What if I type someone else's order number in the address?* RLS returns nothing, so you see "Order not found", exactly like a number that doesn't exist.
+- *Why not use the secret key to read the order?* It skips RLS. Reading with the customer's own login means the database itself guarantees they only see their own orders.
+- *If the Manager changes a price tomorrow, does my invoice change?* No. The price is copied into `order_items` when you order.

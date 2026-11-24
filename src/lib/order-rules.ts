@@ -195,3 +195,18 @@ const jamaicaTimeFormat = new Intl.DateTimeFormat("en-US", {
 export function formatJamaicaTime(time: number): string {
   return jamaicaTimeFormat.format(time).replace("AM", "a.m.").replace("PM", "p.m.");
 }
+
+/*
+ * formatJamaicaDateTime(time) -> "Mon 23 Nov, 12:05 p.m." (always Jamaica time).
+ * Used on the order confirmation page (Part 22) for when the order was placed.
+ * "en-GB" gives the day-before-month order ("23 Nov") used in Jamaica.
+ */
+const jamaicaDateFormat = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "America/Jamaica",
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
+export function formatJamaicaDateTime(time: number): string {
+  return `${jamaicaDateFormat.format(time)}, ${formatJamaicaTime(time)}`;
+}
