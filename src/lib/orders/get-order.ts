@@ -61,6 +61,9 @@ export type OrderDetails = {
   status: OrderStatus;
   fulfilment: Fulfilment; // "PICKUP" | "DELIVERY"
   deliveryLocation: { name: string; feeConfirmed: boolean } | null; // delivery only
+  // Step 41 (FR-01 SR-1.3): building / room / landmark (delivery only; null
+  // for pickup and for delivery orders placed before Step 41).
+  dropOffDetails: string | null;
   requestedTime: number; // when it should be ready / delivered
   isAsap: boolean; // true = "As soon as possible"
   itemsTotal: number;
@@ -144,6 +147,7 @@ type OrderRow = {
   delivery_fee: number | string;
   total: number | string;
   delivery_locations: { name: string; fee_confirmed: boolean } | null;
+  drop_off_details: string | null; // Step 41
   // Supabase gives a one-to-one link as one object; we also accept a list
   // of one, to be safe.
   payments: PaymentRow | PaymentRow[] | null;
@@ -180,7 +184,7 @@ type LynkCheckRow = { not_received_at: string | null; not_received_note: string 
  * extras, all in one trip to the database.
  */
 const ORDER_COLUMNS = `id, created_at, status, fulfilment, requested_time, is_asap,
-  items_total, delivery_fee, total,
+  items_total, delivery_fee, total, drop_off_details,
   delivery_locations ( name, fee_confirmed ),
   payments ( method, status, amount ),
   order_items ( id, item_name, size, unit_price, quantity, note, line_total,
@@ -210,6 +214,7 @@ function toOrderDetails(row: OrderRow): OrderDetails {
     deliveryLocation: row.delivery_locations
       ? { name: row.delivery_locations.name, feeConfirmed: row.delivery_locations.fee_confirmed }
       : null,
+    dropOffDetails: row.drop_off_details ?? null,
     requestedTime: Date.parse(row.requested_time),
     isAsap: row.is_asap,
     itemsTotal: Number(row.items_total),

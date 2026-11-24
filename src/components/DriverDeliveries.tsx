@@ -105,6 +105,12 @@ function DeliveryCard({ delivery }: { delivery: DriverDelivery }) {
         <div className="sm:col-span-2">
           <dt className="text-sm text-stone-500">Drop-off location</dt>
           <dd className="text-xl font-extrabold">{delivery.dropOffLocation}</dd>
+          {/* Step 41 (FR-01 SR-1.3): exactly where at that location. */}
+          <dd className="text-lg font-bold">
+            {delivery.dropOffDetails ?? (
+              <span className="text-base font-normal text-stone-500">No drop-off details (older order): call the customer.</span>
+            )}
+          </dd>
         </div>
         <div>
           <dt className="text-sm text-stone-500">Ready by</dt>

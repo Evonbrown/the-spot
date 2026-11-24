@@ -39,7 +39,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151501')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -81,7 +82,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151502')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -118,7 +120,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151503')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -154,7 +157,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151504')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -203,7 +207,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151505')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -244,7 +249,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151506')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -290,7 +296,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151507')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,
@@ -329,7 +336,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)));
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */);
 select set_config('test.order_id',
   (select id from public.orders where client_request_id = '15151515-1515-4515-8515-151515151508')::text, true);
 select public.assign_delivery(current_setting('test.order_id')::bigint, null,

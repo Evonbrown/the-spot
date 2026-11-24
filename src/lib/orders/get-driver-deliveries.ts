@@ -40,6 +40,9 @@ export type DriverDelivery = {
   orderId: number;
   status: OrderStatus;
   dropOffLocation: string; // copied when it was assigned (Step 31)
+  // Step 41 (FR-01 SR-1.3): building / room / landmark the customer typed.
+  // null only for delivery orders placed before Step 41.
+  dropOffDetails: string | null;
   deliveredAt: number | null; // Step 33: when the driver handed it over (SR-4.3)
   requestedTime: number; // "Ready by" (ms since 1970)
   isAsap: boolean;
@@ -75,6 +78,7 @@ type DeliveryRow = {
     is_asap: boolean;
     created_at: string;
     total: number | string;
+    drop_off_details: string | null; // Step 41
     profiles: { full_name: string | null; phone: string | null } | null;
     payments: PaymentRow | PaymentRow[] | null; // one-to-one: object or list of one
     order_items: {
@@ -95,7 +99,7 @@ type DeliveryRow = {
  * "orders.status" / "orders.created_at" below.
  */
 const DELIVERY_COLUMNS = `drop_off_location, delivered_at,
-  orders!inner ( id, status, requested_time, is_asap, created_at, total,
+  orders!inner ( id, status, requested_time, is_asap, created_at, total, drop_off_details,
     profiles ( full_name, phone ),
     payments ( method, status, amount ),
     order_items ( id, item_name, size, quantity, note,
@@ -155,6 +159,7 @@ function toDriverDelivery(row: DeliveryRow): DriverDelivery {
     orderId: order.id,
     status: order.status,
     dropOffLocation: row.drop_off_location,
+    dropOffDetails: order.drop_off_details,
     deliveredAt: row.delivered_at ? Date.parse(row.delivered_at) : null,
     requestedTime: Date.parse(order.requested_time),
     isAsap: order.is_asap,

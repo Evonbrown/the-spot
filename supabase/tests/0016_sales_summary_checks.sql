@@ -55,7 +55,9 @@ returns bigint language sql as $$
     jsonb_build_array(jsonb_build_object(
       'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
       'item_name', 'Test item', 'size', null, 'unit_price', p_amount,
-      'quantity', 1, 'note', '', 'line_total', p_amount, 'extras', '[]'::jsonb)))
+      'quantity', 1, 'note', '', 'line_total', p_amount, 'extras', '[]'::jsonb)),
+    -- Step 41 (0028): delivery orders need drop-off details.
+    case when p_fulfilment = 'DELIVERY' then 'Test drop-off, Block A' end)
 $$;
 
 -- Another helper: move an order one step with the normal status function.

@@ -76,7 +76,9 @@ returns bigint language sql as $$
         'item_name', l ->> 'name', 'size', l ->> 'size',
         'unit_price', (l ->> 'price')::numeric, 'quantity', (l ->> 'qty')::int, 'note', '',
         'line_total', (l ->> 'price')::numeric * (l ->> 'qty')::int, 'extras', '[]'::jsonb))
-       from jsonb_array_elements(p_lines) l))
+       from jsonb_array_elements(p_lines) l),
+    -- Step 41 (0028): delivery orders need drop-off details.
+    case when p_fulfilment = 'DELIVERY' then 'Test drop-off, Block A' end)
 $$;
 create function pg_temp.step(p_id bigint, p_from public.order_status, p_to public.order_status, p_cash boolean default false)
 returns boolean language sql as $$

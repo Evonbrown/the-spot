@@ -42,7 +42,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(
@@ -80,7 +81,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(
@@ -152,7 +154,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(
@@ -187,7 +190,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(
@@ -244,7 +248,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.change_order_status(
@@ -282,7 +287,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.change_order_status(
@@ -326,7 +332,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(
@@ -372,7 +379,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 )
 from generate_series(1, 3) as n;
 
@@ -419,7 +427,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(
@@ -456,7 +465,8 @@ select public.create_order(
   jsonb_build_array(jsonb_build_object(
     'menu_item_id', (select id from public.menu_items where name = 'Pepsi'),
     'item_name', 'Pepsi', 'size', null, 'unit_price', 220,
-    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb))
+    'quantity', 1, 'note', '', 'line_total', 220, 'extras', '[]'::jsonb)),
+  'Test drop-off, Block A' /* Step 41 (0028): delivery orders need drop-off details */
 );
 
 select public.assign_delivery(

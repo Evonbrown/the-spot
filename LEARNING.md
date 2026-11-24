@@ -1650,3 +1650,32 @@ The Manager's Menu screen now has three tabs: **Menu items | Extras | Delivery**
 - *How does the Manager confirm the real delivery fee?* Delivery tab -> type the fee -> tick "Fee confirmed" -> Save. Checkout stops saying "(sample, not final)".
 - *What if a location closes?* Untick Active: customers can't choose it; old orders still show it.
 - *Why can't a location be deleted?* Old orders point at it (foreign key); deleting would break their history.
+
+## Step 41: Delivery drop-off details + the empty-cart check (FR-01 SR-1.3, AC-2, TS-2.2, TS-1.2)
+**(1) Drop-off details.** When **Delivery** is chosen at checkout, a required box appears under the location list: "**Drop-off details**: building, room or landmark, e.g. Chancellor Hall, Block B" (3 to 200 characters, with a counter).
+- Blank (or too short) -> "Place order" stays blocked and the missing list says "**Add drop-off details (building, room or landmark).**" The server (`placeOrder`) and the database (`create_order`) refuse it too, with the same words.
+- Saved with the order (`orders.drop_off_details`) and shown to: the **driver** (large, under the location on the delivery card), **counter staff** (Delivery box + "Delivery to") and the **customer** (their order page, so they can spot a mistake). Older delivery orders (before Step 41) show "No drop-off details (older order)".
+- Pickup orders never have drop-off details.
+
+**(2) Empty cart (TS-1.2).** It was already handled; now clearer: checkout with an empty cart shows "**Your cart is empty.** Add something from the menu before checking out." (announced by screen readers, `role="alert"`) and a "Back to the menu" button; the server also refuses an empty order.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0028_drop_off_details.sql` | Data | **New.** `orders.drop_off_details` (3-200 chars; pickup = none); `create_order` gets `p_drop_off_details` and refuses a delivery order without it. |
+| `supabase/tests/0028_drop_off_details_checks.sql` | Data | **New.** 6 checks: saved (trimmed), missing refused, length, pickup has none, older orders still change status, who can read it. |
+| `supabase/tests/0006`, `0011`-`0017` | Data | Their delivery `create_order` calls now pass a test drop-off (so they still run). |
+| `src/lib/order-rules.ts` | Application | `readDropOffDetails()`, `DROP_OFF_MIN/MAX`, `DROP_OFF_MISSING`. |
+| `src/lib/orders/actions.ts` | Application | `placeOrder` checks and saves it. |
+| `src/components/CheckoutForm.tsx` | Presentation | The box, the counter, the missing line; clearer empty-cart message. |
+| `src/lib/orders/get-order.ts`, `get-driver-deliveries.ts`, `DriverDeliveries.tsx`, `staff/orders/[id]`, `orders/[id]` | Application / Presentation | Read and show it. |
+
+### Key concepts
+- **Why the "required" rule is in `create_order` and not a CHECK rule:** old delivery orders have no details. A CHECK runs on every UPDATE too, so changing an old order's status would fail. `create_order` only runs for NEW orders.
+- **Changing a function's inputs:** Postgres identifies a function by its name AND its input types, so adding an input means `drop function` + `create function` (with the new input at the end and a default, so existing pickup calls still work).
+- **One rule, three places:** the browser (instant hint), the server (the real check) and the database (last safety net) use the same numbers (3-200) and the same message.
+
+### Possible lecturer questions
+- *What stops a customer sending a delivery order without drop-off details by skipping the page?* placeOrder refuses it; even if that were skipped, create_order refuses it (block 2).
+- *Can another driver see where a customer lives?* No: drivers only read orders assigned to them (block 6).
+- *What happens with an empty cart?* The checkout page shows "Your cart is empty" with a link to the menu, and the server refuses an order with no items.

@@ -213,6 +213,11 @@ function OrderInvoice({ order }: { order: CustomerOrderDetails }) {
             <dt className="text-sm text-stone-500">{isDelivery ? "Delivery to" : "Pickup"}</dt>
             <dd className="font-semibold">
               {isDelivery ? (order.deliveryLocation?.name ?? "Delivery") : "At the counter"}
+              {/* Step 41 (decision): the customer sees their drop-off details,
+                  so they can spot a mistake and call the shop. */}
+              {isDelivery && order.dropOffDetails && (
+                <span className="block font-normal text-stone-700">{order.dropOffDetails}</span>
+              )}
             </dd>
           </div>
           <div>

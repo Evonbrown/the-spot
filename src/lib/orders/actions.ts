@@ -50,6 +50,7 @@ import {
   checkRequestedTime,
   earliestReadyTime,
   leadTimeMinutes,
+  readDropOffDetails,
   type Fulfilment,
 } from "@/lib/order-rules";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -83,6 +84,9 @@ export type PlaceOrderInput = {
   requestedTime: number | null; // "LATER" only: milliseconds since 1970
   paymentMethod: "LYNK" | "CASH";
   lines: PlaceOrderLine[];
+  // Step 41 (FR-01 SR-1.3): building / room / landmark. Delivery only
+  // (required there); null for pickup.
+  dropOffDetails: string | null;
 };
 
 /*
@@ -132,6 +136,8 @@ function readInput(raw: unknown): PlaceOrderInput | null {
         typeof input.requestedTime === "number" &&
         Number.isFinite(input.requestedTime))) &&
     (input.paymentMethod === "LYNK" || input.paymentMethod === "CASH") &&
+    // Step 41: text or nothing (checked properly below).
+    (input.dropOffDetails === null || typeof input.dropOffDetails === "string") &&
     Array.isArray(input.lines) &&
     input.lines.length <= 100;
   if (!okTop) return null;
@@ -238,6 +244,14 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
   // FR-01/FR-04: delivery needs a location; pickup must not have one.
   if ((input.fulfilment === "DELIVERY") !== (input.deliveryLocationId !== null)) {
     return { ok: false, error: BAD_REQUEST };
+  }
+  // Step 41 (FR-01 SR-1.3, TS-2.2): delivery needs drop-off details (3-200
+  // characters); pickup has none. The database checks this again (0028).
+  let dropOffDetails: string | null = null;
+  if (input.fulfilment === "DELIVERY") {
+    const dropOff = readDropOffDetails(input.dropOffDetails ?? "");
+    if ("error" in dropOff) return { ok: false, error: dropOff.error };
+    dropOffDetails = dropOff.details;
   }
 
   // ---- 3. FRESH DATA from the database ----
@@ -411,6 +425,7 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
     p_delivery_fee: deliveryFee,
     p_payment_method: input.paymentMethod,
     p_items: orderItems,
+    p_drop_off_details: dropOffDetails, // Step 41 (null for pickup)
   });
 
   // Step 36: today has already been closed out (the database refuses new

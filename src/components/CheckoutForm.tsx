@@ -37,9 +37,11 @@ import { cartSubtotal, describeLine, lineTotal } from "@/lib/cart";
 import { formatPrice } from "@/lib/menu-helpers";
 import {
   canOrderToday,
+  DROP_OFF_MAX,
   earliestReadyTime,
   formatJamaicaTime,
   leadTimeMinutes,
+  readDropOffDetails,
   timeSlots,
   type Fulfilment,
   type OpeningHours,
@@ -101,6 +103,8 @@ export default function CheckoutForm({
   const [timeChoice, setTimeChoice] = useState<"ASAP" | "LATER">("ASAP");
   const [slot, setSlot] = useState<number | null>(null);
   const [payment, setPayment] = useState<PaymentMethod | null>(null);
+  // Step 41 (FR-01 SR-1.3): building / room / landmark, delivery only.
+  const [dropOff, setDropOff] = useState("");
 
   // ---- Sending the order (Part 21) ---------------------------------------------
   // isPending = true while the server is working: the button shows
@@ -147,6 +151,7 @@ export default function CheckoutForm({
       setTimeChoice("ASAP");
       setSlot(null);
       setPayment(null);
+      setDropOff("");
     };
   }, []);
 
@@ -172,11 +177,14 @@ export default function CheckoutForm({
     );
   }
 
-  // 2. Empty cart: nothing to check out.
+  // 2. Empty cart: nothing to check out (TS-1.2). role="alert" = screen
+  //    readers announce it straight away. The server refuses an empty cart
+  //    too (placeOrder), in case the page is skipped.
   if (lines.length === 0) {
     return (
-      <div className="mt-6 rounded-xl bg-white p-6 text-center shadow-sm">
+      <div role="alert" className="mt-6 rounded-xl bg-white p-6 text-center shadow-sm">
         <p className="text-lg font-semibold">Your cart is empty.</p>
+        <p className="mt-1 text-stone-600">Add something from the menu before checking out.</p>
         <Link
           href="/menu"
           className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-brand px-5 font-semibold text-white hover:bg-brand-dark"
@@ -220,6 +228,9 @@ export default function CheckoutForm({
   const missing: string[] = [];
   if (!fulfilment) missing.push("Choose pickup or delivery.");
   if (fulfilment === "DELIVERY" && !location) missing.push("Choose where to deliver.");
+  // Step 41 (TS-2.2): delivery can't go ahead without drop-off details.
+  const dropOffCheck = readDropOffDetails(dropOff);
+  if (fulfilment === "DELIVERY" && "error" in dropOffCheck) missing.push(dropOffCheck.error);
   if (effectiveTimeChoice === "LATER" && chosenSlot === null) missing.push("Choose a time.");
   if (!payment) missing.push("Choose how to pay.");
 
@@ -245,6 +256,8 @@ export default function CheckoutForm({
       timeChoice: effectiveTimeChoice,
       requestedTime: effectiveTimeChoice === "LATER" ? chosenSlot : null,
       paymentMethod: payment,
+      // Step 41: delivery only (the server checks it again).
+      dropOffDetails: fulfilment === "DELIVERY" ? dropOff : null,
       lines: lines.map((line) => ({
         itemId: line.itemId,
         name: line.name,
@@ -383,6 +396,31 @@ export default function CheckoutForm({
                   </label>
                 ))}
               </div>
+
+              {/* Step 41 (FR-01 SR-1.3, AC-2, TS-2.2): WHERE exactly at that
+                  location, so the driver can find the customer. Required. */}
+              <label className="mt-4 block font-semibold">
+                Drop-off details
+                <span className="block text-sm font-normal text-stone-600">
+                  Building, room or landmark, e.g. &quot;Chancellor Hall, Block B&quot;.
+                </span>
+                <textarea
+                  name="dropOffDetails"
+                  value={dropOff}
+                  onChange={(e) => {
+                    setDropOff(e.target.value);
+                    setFailure(null);
+                  }}
+                  rows={2}
+                  maxLength={DROP_OFF_MAX}
+                  required
+                  aria-describedby="drop-off-count"
+                  className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 text-base font-normal"
+                />
+                <span id="drop-off-count" className="mt-1 block text-right text-xs font-normal text-stone-500">
+                  {dropOff.length}/{DROP_OFF_MAX}
+                </span>
+              </label>
             </fieldset>
           )}
         </fieldset>

@@ -211,3 +211,31 @@ const jamaicaDateFormat = new Intl.DateTimeFormat("en-GB", {
 export function formatJamaicaDateTime(time: number): string {
   return `${jamaicaDateFormat.format(time)}, ${formatJamaicaTime(time)}`;
 }
+
+// =============================================================================
+// Step 41 (FR-01 SR-1.3, AC-2, TS-2.2): DROP-OFF DETAILS for delivery orders.
+// =============================================================================
+
+/* The length rule (same numbers as the database CHECK, migration 0028). */
+export const DROP_OFF_MIN = 3;
+export const DROP_OFF_MAX = 200;
+
+/* The message when it's missing (the database says exactly the same). */
+export const DROP_OFF_MISSING = "Add drop-off details (building, room or landmark).";
+
+/*
+ * readDropOffDetails(text) -> { details } (tidied) or { error }.
+ *   "  Chancellor Hall,   Block B " -> "Chancellor Hall, Block B"
+ *   "" or only spaces               -> DROP_OFF_MISSING
+ *   "A" / 201 characters            -> a length message
+ * Used by the checkout page (instant hint) AND placeOrder (the real check).
+ */
+export function readDropOffDetails(text: string): { details: string } | { error: string } {
+  const details = text.trim().replace(/\s+/g, " ");
+  if (details === "") return { error: DROP_OFF_MISSING };
+  if (details.length < DROP_OFF_MIN) {
+    return { error: `Drop-off details need at least ${DROP_OFF_MIN} characters (e.g. "Chancellor Hall, Block B").` };
+  }
+  if (details.length > DROP_OFF_MAX) return { error: `Drop-off details can be at most ${DROP_OFF_MAX} characters.` };
+  return { details };
+}

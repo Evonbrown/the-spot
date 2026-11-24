@@ -164,6 +164,10 @@ function DeliveryBox({
         <div className="sm:col-span-2">
           <dt className="text-sm text-stone-500">Drop-off location</dt>
           <dd className="text-2xl font-extrabold">{location}</dd>
+          {/* Step 41 (FR-01 SR-1.3): exactly where at that location. */}
+          <dd className="text-lg font-bold">
+            {order.dropOffDetails ?? <span className="text-base font-normal text-stone-500">No drop-off details (older order)</span>}
+          </dd>
         </div>
         <div>
           <dt className="text-sm text-stone-500">Ready by</dt>
@@ -282,6 +286,10 @@ function OrderDetails({ order, drivers }: { order: StaffOrderDetails; drivers: D
             <dt className="text-sm text-stone-500">{isDelivery ? "Delivery to" : "Pickup"}</dt>
             <dd className="font-semibold">
               {isDelivery ? (order.deliveryLocation?.name ?? "Location missing") : "At the counter"}
+              {/* Step 41: the building / room / landmark, under the location. */}
+              {isDelivery && order.dropOffDetails && (
+                <span className="block font-normal text-stone-700">{order.dropOffDetails}</span>
+              )}
             </dd>
           </div>
           <div>
