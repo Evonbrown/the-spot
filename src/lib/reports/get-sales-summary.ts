@@ -8,6 +8,10 @@
  *                                  or a message;
  *         getSalesSummary(day)  -> all the figures, worked out BY THE
  *                                  DATABASE (daily_sales_summary, 0016).
+ *       Step 35 (SR-6.5), Manager only:
+ *         parseReportRange(...) -> a valid 1-31 day range, or a message;
+ *         getSalesRange(...)    -> a line per day + the combined summary
+ *                                  (sales_range_summary, 0017).
  *
  * LAYER: Application layer. The /manager and /staff/sales pages
  *        (Presentation) call it; the maths happens in the Data layer.
@@ -99,40 +103,156 @@ export async function getSalesSummary(day: string): Promise<{ summary: SalesSumm
 
   if (error) {
     console.error("getSalesSummary failed:", error.message);
-    // Our own messages from the function (role / date rules) are safe to show.
-    const known = ["Counter staff can only see today's sales.", "You are not allowed to see sales reports."];
-    return { error: known.includes(error.message) ? error.message : "We couldn't load the sales summary. Please try again." };
+    return { error: safeMessage(error.message, "We couldn't load the sales summary. Please try again.") };
   }
 
-  // The JSON from the database (snake_case). Number(...) because exact
-  // numeric values can arrive as text.
-  const raw = data as Record<string, unknown> & { by_method: Record<string, unknown>[] | null };
-  const n = (value: unknown) => Number(value ?? 0);
+  return { summary: toSummary(data as RawSummary) };
+}
 
+// ---- Turning the database's JSON into our shape ------------------------------
+
+// The JSON from the database (snake_case names, numbers may arrive as text).
+type RawSummary = Record<string, unknown> & { by_method?: Record<string, unknown>[] | null };
+
+/* Number(...) because exact numeric values can arrive as text ("1200.00"). */
+const n = (value: unknown) => Number(value ?? 0);
+
+/*
+ * toSummary(raw, day) -> our SalesSummary. Shared by the one-day summary
+ * (Step 34) and the range total (Step 35): the database uses the SAME names
+ * for both, so they're read the same way.
+ */
+function toSummary(raw: RawSummary, day?: string): SalesSummary {
   return {
-    summary: {
-      day: String(raw.day),
-      orders: n(raw.orders),
-      grossSales: n(raw.gross_sales),
-      deliveryFees: n(raw.delivery_fees),
-      refunds: n(raw.refunds),
-      netSales: n(raw.net_sales),
-      cancelledCount: n(raw.cancelled_count),
-      cancelledValue: n(raw.cancelled_value),
-      abandonedCount: n(raw.abandoned_count),
-      abandonedValue: n(raw.abandoned_value),
-      notCountedCount: n(raw.not_counted_count),
-      notCountedValue: n(raw.not_counted_value),
-      byMethod: (raw.by_method ?? []).map((line) => ({
-        method: line.method as PaymentMethod,
-        transactions: n(line.transactions),
-        amount: n(line.amount),
-        refunds: n(line.refunds),
-        net: n(line.net),
-        percent: n(line.percent),
+    day: day ?? String(raw.day),
+    orders: n(raw.orders),
+    grossSales: n(raw.gross_sales),
+    deliveryFees: n(raw.delivery_fees),
+    refunds: n(raw.refunds),
+    netSales: n(raw.net_sales),
+    cancelledCount: n(raw.cancelled_count),
+    cancelledValue: n(raw.cancelled_value),
+    abandonedCount: n(raw.abandoned_count),
+    abandonedValue: n(raw.abandoned_value),
+    notCountedCount: n(raw.not_counted_count),
+    notCountedValue: n(raw.not_counted_value),
+    byMethod: (raw.by_method ?? []).map((line) => ({
+      method: line.method as PaymentMethod,
+      transactions: n(line.transactions),
+      amount: n(line.amount),
+      refunds: n(line.refunds),
+      net: n(line.net),
+      percent: n(line.percent),
+    })),
+    methodsTotal: n(raw.methods_total),
+    totalsMatch: raw.totals_match === true,
+  };
+}
+
+// =============================================================================
+// Step 35 (SR-6.5): a DATE RANGE (1 to 31 days), Manager only
+// =============================================================================
+
+/* The longest range (decision; same number as the database check, 0017). */
+export const MAX_RANGE_DAYS = 31;
+
+/* One line of the "Daily totals" table. */
+export type DayTotal = {
+  day: string; // "2026-11-24"
+  orders: number;
+  grossSales: number;
+  refunds: number; // J$0 until Step 38
+  netSales: number;
+  cash: number;
+  lynk: number;
+};
+
+/* The range report: a line per day + the combined summary. */
+export type SalesRange = {
+  start: string;
+  end: string;
+  days: DayTotal[];
+  total: SalesSummary; // the whole range, same figures as a one-day summary
+};
+
+/*
+ * daysBetween("2026-11-01", "2026-11-03") -> 2. Plain dates, so we count in
+ * UTC: no time-zone or summer-time surprises.
+ */
+function daysBetween(start: string, end: string): number {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000);
+}
+
+/*
+ * parseReportRange(fromText, toText, today) -> { start, end } or { error }.
+ *   - no "from"      -> today;
+ *   - no "to"        -> the same day as "from" (= a one-day report);
+ *   - both must be real, not-future dates (parseReportDay);
+ *   - "to" not before "from", and at most 31 days.
+ * The database checks the same rules again.
+ */
+export function parseReportRange(
+  fromText: string | undefined,
+  toText: string | undefined,
+  today: string
+): { start: string; end: string } | { error: string } {
+  const from = parseReportDay(fromText, today);
+  if ("error" in from) return { error: `Start day: ${from.error}` };
+  const to = parseReportDay(toText || from.day, today);
+  if ("error" in to) return { error: `End day: ${to.error}` };
+  if (to.day < from.day) return { error: "The end day must be on or after the start day." };
+  if (daysBetween(from.day, to.day) + 1 > MAX_RANGE_DAYS) {
+    return { error: `Choose at most ${MAX_RANGE_DAYS} days.` };
+  }
+  return { start: from.day, end: to.day };
+}
+
+/*
+ * getSalesRange(start, end) -> { range } or { error }.
+ * The database works out every day AND the combined total in one call
+ * (sales_range_summary, migration 0017), Manager only.
+ */
+export async function getSalesRange(start: string, end: string): Promise<{ range: SalesRange } | { error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("sales_range_summary", { p_start: start, p_end: end });
+
+  if (error) {
+    console.error("getSalesRange failed:", error.message);
+    return { error: safeMessage(error.message, "We couldn't load the sales for that range. Please try again.") };
+  }
+
+  const raw = data as { start: string; end: string; total: RawSummary; days: Record<string, unknown>[] | null };
+  return {
+    range: {
+      start: raw.start,
+      end: raw.end,
+      total: toSummary(raw.total, `${raw.start}..${raw.end}`),
+      days: (raw.days ?? []).map((day) => ({
+        day: String(day.day),
+        orders: n(day.orders),
+        grossSales: n(day.gross_sales),
+        refunds: n(day.refunds),
+        netSales: n(day.net_sales),
+        cash: n(day.cash),
+        lynk: n(day.lynk),
       })),
-      methodsTotal: n(raw.methods_total),
-      totalsMatch: raw.totals_match === true,
     },
   };
+}
+
+/*
+ * safeMessage(message, fallback): our OWN messages from the report functions
+ * (role and date rules, written by us in 0016/0017) are safe to show; any
+ * other database error is shown as a general "try again".
+ */
+export function safeMessage(message: string, fallback: string): string {
+  const ours = [
+    "Counter staff can only see today's sales.",
+    "You are not allowed to see sales reports.",
+    "Only the Manager can see these reports.",
+    "The end day must be on or after the start day.",
+    "Choose at most 31 days.",
+    "The range can't include future days.",
+  ];
+  return ours.includes(message) ? message : fallback;
 }

@@ -1308,3 +1308,40 @@ A **business day** = midnight to midnight **Jamaica time**; an order belongs to 
 - *Why is Lynk often 0?* Lynk payments only count once the Supervisor has verified them (PAID); until then they're in "Not counted".
 - *Can counter staff see yesterday's sales?* No: there's no date picker for them, and the database function refuses any day but today for counter staff (tested in block 3).
 - *How is % of net sales worked out?* Each type's net ÷ total net × 100, rounded to 1 decimal; on a day with no sales it's 0 (no division by zero).
+
+## Step 35: Item Volume Report + date ranges (FR-06 SR-6.4 / SR-6.5, AC-6.4 / AC-6.5)
+The Manager's page (`/manager`, now "Sales reports") can show **one day or a range of up to 31 days** (From / To, plus quick links Today, Last 7 days, This month):
+- **Range:** a **Daily totals** table (one line per day, days with no sales show 0, then a Total line) and the combined summary (the same figures as Step 34) for the whole range.
+- **Item volume** (for the day or range): **one line per item AND size**, e.g. "Fry Chicken (Large)", with category, quantity sold and revenue; sorted by quantity (default), revenue or name; filtered by category and by order type (pickup / delivery). A check line shows that item revenue = gross sales − delivery fees.
+
+Counter staff are unchanged (today only, `/staff/sales`).
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0017_item_volume_and_ranges.sql` | Data | **New.** `report_orders()` (THE shared "which orders count" rule, nobody may call it directly), `report_summary()`, `daily_sales_summary()` rewritten to use them, `sales_range_summary()` and `item_volume_report()` (Manager only, 1-31 days, no future). |
+| `supabase/migrations/0018_fix_sales_range_summary.sql` | Data | **New (fix).** `sales_range_summary()` again, computing each day's totals FIRST, then listing them (see "Bug we fixed" below). |
+| `supabase/tests/0017_item_volume_checks.sql` | Data | **New.** Block 1 checks ALL the known numbers at once (sorts, filters, sizes, item total = gross − fees, daily totals, one-day range = daily summary); date rules; who; counter staff today still works. |
+| `src/lib/reports/get-sales-summary.ts` | Application | **Added** `parseReportRange()`, `getSalesRange()`, shared `toSummary()` and `safeMessage()`. |
+| `src/lib/reports/get-item-volume.ts` | Application (server only) | **New.** `readItemFilters()` (only known values), `getItemVolume()`. |
+| `src/components/DailyTotals.tsx` | Presentation | **New.** The per-day table + Total. |
+| `src/components/ItemVolumeReport.tsx` | Presentation | **New.** Filters (GET form) + item table + check line. |
+| `src/app/manager/page.tsx` | Presentation | From / To + quick links; summary or range; item report. |
+
+### Key concepts
+- **One rule, one place:** "which orders count" is written ONCE (`report_orders`). The daily summary, the range and the item report all use it, so they can never disagree.
+- **Helpers nobody can call:** `report_orders` returns real order rows, so its EXECUTE right is removed from everyone; only our checked report functions (which run as the owner) use it.
+- **generate_series:** makes a row for every day in the range, so a day with no sales still shows a 0 line.
+- **Group by item and size:** sizes have different prices, so "Fry Chicken (Large)" and "(Small)" are separate lines.
+- **Built-in cross-check:** item revenue + delivery fees = gross sales. If not, something is wrong with the data, and the page says so.
+- **WITH ORDINALITY** (in the test): numbers the rows of a function's result in the order it returned them.
+- **Forms that carry each other's choices:** hidden fields keep the dates when changing filters, and the filters when changing dates.
+
+### Bug we fixed: "aggregate function calls cannot be nested"
+The first version of `sales_range_summary()` (0017) did two "squeezes" in ONE step: `jsonb_agg(...)` (squeeze all the days into one list) with `count()` / `sum()` (squeeze each day's orders into totals) INSIDE it. Postgres can't nest aggregates like that. The fix (0018) does it in two steps: a `per_day` CTE adds up each day (`group by day`), then `jsonb_agg` lists those day rows. Because 0017 had already been run, the fix is a NEW migration with `create or replace function`, not an edit to 0017: migrations are a history, each run once, in order.
+
+### Possible lecturer questions
+- *Why does "Fry Chicken" appear twice?* Once per size, because each size has its own price and the kitchen plans by size.
+- *How do you make sure the item report and the sales summary agree?* Both use the same database rule for which orders count, and the page checks item revenue = gross sales − delivery fees.
+- *Why limit ranges to 31 days?* It covers a monthly report and meets the SRS speed target (10 s for 31 days); longer exports can come later.
+- *Can counter staff see the item report?* No: the database functions are Manager only, and counter staff's page has no ranges or item report.

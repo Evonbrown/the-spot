@@ -1,39 +1,56 @@
 /*
- * src/app/manager/page.tsx   ->   http://localhost:3000/manager?date=2026-11-24
+ * src/app/manager/page.tsx
+ *   ->   http://localhost:3000/manager?from=2026-11-01&to=2026-11-24
  *
- * WHAT: The Manager screen: the Daily Sales Summary for ONE business day
- *       (Step 34, FR-06 SR-6.1 / SR-6.2 / SR-6.3), with a date picker.
- *       Default: today (Jamaica time). The chosen day is in the address
- *       (?date=...), so it can be bookmarked and the Back button works.
- *       Item volumes, date ranges, closeout and export are later steps (35-37).
+ * WHAT: The Manager's reports (FR-06):
+ *         - Step 34: the Daily Sales Summary (SR-6.1 / SR-6.2 / SR-6.3);
+ *         - Step 35: a DATE RANGE of 1 to 31 days (SR-6.5): "Daily totals"
+ *           (a line per day + Total) and the combined summary;
+ *         - Step 35: the Item Volume Report (SR-6.4) for the same day/range,
+ *           with category, order type and sort filters.
+ *       Default: today (Jamaica time). The choice is in the address, so it
+ *       can be bookmarked and Back works. The old "?date=" (Step 34) still
+ *       works. Closeout is Step 36, export / print Step 37.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
- *        getSalesSummary (Application layer) asks the database to do the maths
- *        (Data layer, daily_sales_summary in migration 0016).
+ *        the reports are worked out by the database (Data layer, 0016/0017),
+ *        which checks the role and the date rules AGAIN.
  *
- * WHO (SR-6.10): manager ONLY, and the Manager may pick ANY past day or today.
- *   (Counter staff see today only, on /staff/sales.)
+ * WHO (SR-6.10): manager ONLY. (Counter staff see today only, /staff/sales.)
  *
- * The date picker is a plain HTML form with method "get": choosing a day and
- * pressing "Show" just opens /manager?date=THAT-DAY. It works even before the
- * page's JavaScript has loaded.
+ * The date and filter controls are plain HTML "GET" forms: pressing the
+ * button just opens /manager?... with the choices. Hidden fields carry the
+ * OTHER form's choices along, so changing dates keeps the filters and the
+ * other way round. It all works before the page's JavaScript has loaded.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import DailyTotals from "@/components/DailyTotals";
+import ItemVolumeReport from "@/components/ItemVolumeReport";
 import SalesSummary from "@/components/SalesSummary";
 import { requireRole } from "@/lib/auth/require-role";
-import { getSalesSummary, jamaicaToday, parseReportDay } from "@/lib/reports/get-sales-summary";
+import { getMenuItems } from "@/lib/menu";
+import { getCategories } from "@/lib/menu-helpers";
+import { getItemVolume, readItemFilters, type ItemFilters } from "@/lib/reports/get-item-volume";
+import {
+  getSalesRange,
+  getSalesSummary,
+  jamaicaToday,
+  MAX_RANGE_DAYS,
+  parseReportRange,
+} from "@/lib/reports/get-sales-summary";
 
 export const metadata: Metadata = {
-  title: "Daily sales summary",
+  title: "Sales reports",
 };
 
-type SearchParams = Promise<{ date?: string | string[] }>;
+type Params = Record<string, string | string[] | undefined>;
+type SearchParams = Promise<Params>;
 
 /*
- * The address part (?date=) and the login are only known per visit, so
+ * The address (?from=...) and the login are only known per visit, so
  * everything sits inside <Suspense> (Cache Components). ALL content is inside
  * the guarded component: no numbers are sent before the role check passes.
  */
@@ -55,40 +72,155 @@ export default function ManagerPage({ searchParams }: { searchParams: SearchPara
   );
 }
 
+/* "?a=1&a=2" arrives as a list: use the first value. */
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/* "2026-11-24" + (-6) -> "2026-11-18" (plain dates, counted in UTC). */
+function addDays(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 /*
  * ManagerScreen (runs on the server, per visit).
  * 1. Guard: not logged in -> /login (and back), wrong role -> /no-access.
- * 2. Read and check the chosen day (default today; not in the future).
- * 3. Ask the database for that day's summary.
+ * 2. Read and check the day / range and the item filters.
+ * 3. Load the summary (one day) or range, the item report and the category
+ *    list AT THE SAME TIME.
  */
 async function ManagerScreen({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   await requireRole(["manager"], { returnTo: "/manager" });
 
   const today = await jamaicaToday();
-  // "?date=a&date=b" arrives as a list: use the first one.
-  const dateText = Array.isArray(params.date) ? params.date[0] : params.date;
-  const parsed = parseReportDay(dateText, today);
-  const day = "day" in parsed ? parsed.day : today;
-  const result = "day" in parsed ? await getSalesSummary(day) : null;
+  // "from" (or Step 34's "date"), and "to".
+  const parsed = parseReportRange(first(params.from) ?? first(params.date), first(params.to), today);
+  const start = "start" in parsed ? parsed.start : today;
+  const end = "end" in parsed ? parsed.end : today;
+  const isRange = start !== end;
+
+  // The category list comes from the menu (cached), in menu order. If the
+  // menu can't load, the filter just offers "All categories".
+  const categories = await getMenuItems().then(getCategories, () => [] as string[]);
+  const filters = readItemFilters(
+    { category: first(params.category), type: first(params.type), sort: first(params.sort) },
+    categories
+  );
+
+  // Only load reports when the dates are valid.
+  const [summaryResult, rangeResult, itemsResult] =
+    "error" in parsed
+      ? [null, null, null]
+      : await Promise.all([
+          isRange ? null : getSalesSummary(start),
+          isRange ? getSalesRange(start, end) : null,
+          getItemVolume(start, end, filters),
+        ]);
+
+  // The figures for the period (one day, or the range's combined total).
+  const periodSummary =
+    summaryResult && "summary" in summaryResult
+      ? summaryResult.summary
+      : rangeResult && "range" in rangeResult
+        ? rangeResult.range.total
+        : null;
+  const loadError =
+    (summaryResult && "error" in summaryResult && summaryResult.error) ||
+    (rangeResult && "error" in rangeResult && rangeResult.error) ||
+    null;
 
   return (
     <>
-      <h1 className="pt-6 text-3xl font-extrabold">Daily sales summary</h1>
+      <h1 className="pt-6 text-3xl font-extrabold">Sales reports</h1>
 
-      {/* ---- The date picker ---- */}
+      <DateControls start={start} end={end} today={today} filters={filters} />
+      <p className="mt-2 text-sm text-stone-600">
+        {isRange ? `${formatDay(start)} to ${formatDay(end)}` : start === today ? "Today" : formatDay(start)} ·
+        midnight to midnight, Jamaica time · by the time each order was placed.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-4">
+        {"error" in parsed ? (
+          <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+            {parsed.error}
+          </p>
+        ) : (
+          <>
+            {loadError && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+                {loadError}
+              </p>
+            )}
+            {/* Range: a line per day first, then the combined summary. */}
+            {rangeResult && "range" in rangeResult && <DailyTotals range={rangeResult.range} />}
+            {periodSummary && (
+              <>
+                {isRange && <h2 className="text-xl font-bold">Whole range</h2>}
+                <SalesSummary summary={periodSummary} />
+              </>
+            )}
+            {itemsResult && (
+              <ItemVolumeReport
+                start={start}
+                end={end}
+                categories={categories}
+                filters={filters}
+                result={itemsResult}
+                itemsShouldTotal={periodSummary ? periodSummary.grossSales - periodSummary.deliveryFees : null}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/*
+ * DateControls: From / To and quick choices. For ONE day, leave "To" empty
+ * (or the same as "From"). The item filters ride along as hidden fields.
+ */
+function DateControls({
+  start,
+  end,
+  today,
+  filters,
+}: {
+  start: string;
+  end: string;
+  today: string;
+  filters: ItemFilters;
+}) {
+  const input = "mt-1 block min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base";
+  // Keep the item filters in the quick links too.
+  const keep = new URLSearchParams();
+  if (filters.category) keep.set("category", filters.category);
+  if (filters.fulfilment) keep.set("type", filters.fulfilment);
+  if (filters.sort !== "quantity") keep.set("sort", filters.sort);
+  const link = (from: string, to: string) => {
+    const query = new URLSearchParams(keep);
+    query.set("from", from);
+    query.set("to", to);
+    return `/manager?${query.toString()}`;
+  };
+  const monthStart = `${today.slice(0, 8)}01`; // "2026-11-24" -> "2026-11-01"
+
+  return (
+    <>
       <form method="get" className="mt-3 flex flex-wrap items-end gap-2">
+        {filters.category && <input type="hidden" name="category" value={filters.category} />}
+        {filters.fulfilment && <input type="hidden" name="type" value={filters.fulfilment} />}
+        {filters.sort !== "quantity" && <input type="hidden" name="sort" value={filters.sort} />}
         <label className="text-sm font-semibold">
-          Business day
-          {/* max = today: no future days. text-base: no zoom on iPhones. */}
-          <input
-            type="date"
-            name="date"
-            defaultValue={day}
-            max={today}
-            required
-            className="mt-1 block min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-base"
-          />
+          From
+          <input type="date" name="from" defaultValue={start} max={today} required className={input} />
+        </label>
+        <label className="text-sm font-semibold">
+          To <span className="font-normal text-stone-500">(empty = one day)</span>
+          <input type="date" name="to" defaultValue={end === start ? "" : end} max={today} className={input} />
         </label>
         <button
           type="submit"
@@ -96,35 +228,27 @@ async function ManagerScreen({ searchParams }: { searchParams: SearchParams }) {
         >
           Show
         </button>
-        {day !== today && (
-          <Link href="/manager" className="inline-flex min-h-11 items-center px-2 font-semibold text-brand underline">
-            Back to today
-          </Link>
-        )}
       </form>
-      <p className="mt-2 text-sm text-stone-600">
-        {day === today ? "Today" : formatDay(day)} · midnight to midnight, Jamaica time · by the time each order was
-        placed.
+      <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
+        <Link href={link(today, today)} className="inline-flex min-h-11 items-center font-semibold text-brand underline">
+          Today
+        </Link>
+        <Link
+          href={link(addDays(today, -6), today)}
+          className="inline-flex min-h-11 items-center font-semibold text-brand underline"
+        >
+          Last 7 days
+        </Link>
+        <Link href={link(monthStart, today)} className="inline-flex min-h-11 items-center font-semibold text-brand underline">
+          This month
+        </Link>
+        <span className="inline-flex min-h-11 items-center text-stone-500">Up to {MAX_RANGE_DAYS} days.</span>
       </p>
-
-      <div className="mt-4">
-        {"error" in parsed ? (
-          <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
-            {parsed.error}
-          </p>
-        ) : result && "error" in result ? (
-          <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
-            {result.error}
-          </p>
-        ) : result ? (
-          <SalesSummary summary={result.summary} />
-        ) : null}
-      </div>
     </>
   );
 }
 
-/* "2026-11-23" -> "Mon 23 Nov 2026" (shown under the picker). */
+/* "2026-11-23" -> "Mon 23 Nov 2026". */
 function formatDay(day: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "UTC", // the text is a plain date, so no time-zone shift
