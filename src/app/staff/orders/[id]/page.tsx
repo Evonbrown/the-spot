@@ -5,7 +5,8 @@
  *       Order ID and status, customer name and phone, every item (size,
  *       extras with prices, meal note, line total), pickup or delivery
  *       location, ready-by time, order time, payment method and totals.
- *       VIEW ONLY: status buttons come in Step 26.
+ *       Step 26: an "Actions" box with the ONE next status step + Cancel
+ *       (StatusButtons). Order ID check at handover: Step 27.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        getOrderForStaff (Application layer) reads through RLS (Data layer,
@@ -28,6 +29,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import OrderLiveRefresh from "@/components/OrderLiveRefresh";
 import StatusBadge from "@/components/StatusBadge";
+import StatusButtons from "@/components/StatusButtons";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
 import { formatJamaicaDateTime, formatJamaicaTime } from "@/lib/order-rules";
@@ -117,6 +119,14 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
           {/* Listens to THIS order only. */}
           <OrderLiveRefresh channelName={`staff-order-${order.id}`} orderId={order.id} />
         </div>
+      </section>
+
+      {/* ---- Actions (Step 26): the ONE next step + Cancel ---- */}
+      <section className="mt-4 rounded-xl bg-white p-5 shadow-sm" aria-labelledby="actions-title">
+        <h2 id="actions-title" className="mb-3 text-lg font-bold">
+          Actions
+        </h2>
+        <StatusButtons orderId={order.id} status={order.status} fulfilment={order.fulfilment} />
       </section>
 
       {/* ---- Customer, fulfilment, times, payment ---- */}

@@ -17,22 +17,24 @@
  * No "use client" since Step 25: the live part moved into OrderLiveRefresh,
  * so this list is drawn on the server and arrives as plain HTML.
  *
- * NOT HERE YET: status buttons and "Past Orders" (Step 26); the server's
- * status rules (Step 28).
+ * Step 26: a "Past Orders" section under the queue (today's finished orders).
+ * Status buttons are on each order's details page.
  */
 
 import Link from "next/link";
 import OrderLiveRefresh from "@/components/OrderLiveRefresh";
 import StatusBadge from "@/components/StatusBadge";
 import { formatJamaicaTime } from "@/lib/order-rules";
-import type { QueueOrder } from "@/lib/orders/get-queue";
+import type { PastOrder, QueueOrder } from "@/lib/orders/get-queue";
 
 type Props = {
   orders: QueueOrder[];
   loadError: boolean; // true = the server couldn't read the queue
+  pastOrders: PastOrder[]; // Step 26: today's finished orders, newest first
+  pastLoadError: boolean;
 };
 
-export default function StaffQueue({ orders, loadError }: Props) {
+export default function StaffQueue({ orders, loadError, pastOrders, pastLoadError }: Props) {
   return (
     <section aria-labelledby="queue-title">
       <div className="flex items-center justify-between gap-3 pt-6">
@@ -66,6 +68,52 @@ export default function StaffQueue({ orders, loadError }: Props) {
           </li>
         ))}
       </ol>
+
+      <PastOrders orders={pastOrders} loadError={pastLoadError} />
+    </section>
+  );
+}
+
+/*
+ * PastOrders (Step 26, FR-03): "completed/cancelled/abandoned orders move to
+ * a Past Orders section". TODAY only (decision, FR-06), newest first, one
+ * short line each; tap a line for the full details. It updates live too: the
+ * same OrderLiveRefresh refresh rebuilds this list, so an order moves from
+ * the queue to here without refreshing.
+ */
+function PastOrders({ orders, loadError }: { orders: PastOrder[]; loadError: boolean }) {
+  return (
+    <section aria-labelledby="past-title" className="mt-10">
+      <h2 id="past-title" className="text-2xl font-extrabold">
+        Past orders <span className="text-base font-semibold text-stone-500">(today)</span>
+      </h2>
+
+      {loadError ? (
+        <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-900">
+          We couldn&apos;t load past orders. Refresh the page to try again.
+        </p>
+      ) : orders.length === 0 ? (
+        <p className="mt-3 text-sm text-stone-600">No finished orders yet today.</p>
+      ) : (
+        <ul className="mt-3 flex flex-col divide-y divide-stone-100 overflow-hidden rounded-xl bg-white shadow-sm">
+          {orders.map((order) => (
+            <li key={order.id}>
+              <Link
+                href={`/staff/orders/${order.id}`}
+                aria-label={`Order ${order.id}, view details`}
+                className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 hover:bg-stone-50"
+              >
+                <span className="font-bold">#{order.id}</span>
+                <span className="text-sm text-stone-600">
+                  {formatJamaicaTime(order.createdAt)} ·{" "}
+                  {order.fulfilment === "DELIVERY" ? `Delivery: ${order.locationName ?? "?"}` : "Pickup"}
+                </span>
+                <StatusBadge status={order.status} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

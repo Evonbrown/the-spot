@@ -81,7 +81,8 @@ export function leadTimeMinutes(fulfilment: Fulfilment, hasMadeToOrder: boolean)
  * How: shift the time into "Jamaica clock" numbers, cut it back to the start
  * of that day, then shift back.
  */
-function jamaicaDayStart(time: number): number {
+// Exported for Step 26: "Past Orders" lists only TODAY's orders (Jamaica day).
+export function jamaicaDayStart(time: number): number {
   const shifted = time + JAMAICA_OFFSET;
   return Math.floor(shifted / DAY) * DAY - JAMAICA_OFFSET;
 }

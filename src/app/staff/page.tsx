@@ -9,15 +9,16 @@
  *        through RLS (Data layer, migration 0007).
  * WHO: counter_staff ONLY (strict: each role opens only its own screen).
  *
- * Coming next: status buttons + "Past Orders" (Step 26), server status rules
- * (Step 28), driver assignment (FR-04), Order ID check at handover (SAF-1).
+ * Step 26: "Past Orders" (today's finished orders) under the queue; status
+ * buttons are on each order's details page. Coming next: Order ID check at
+ * handover (Step 27, SAF-1), full status rules (Step 28), drivers (FR-04).
  */
 
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import StaffQueue from "@/components/StaffQueue";
 import { requireRole } from "@/lib/auth/require-role";
-import { getActiveOrders, type QueueOrder } from "@/lib/orders/get-queue";
+import { getActiveOrders, getPastOrders } from "@/lib/orders/get-queue";
 
 export const metadata: Metadata = {
   title: "Order queue",
@@ -51,19 +52,23 @@ export default function StaffPage() {
  * StaffScreen (runs on the server, per visitor, and AGAIN each time the
  * queue calls router.refresh() after a Realtime message).
  * 1. Guard: not logged in -> /login, wrong role -> /no-access.
- * 2. Read the active orders. If that fails, the queue shows a message
- *    instead of crashing, and keeps listening, so it recovers on the next change.
+ * 2. Read the active orders AND today's past orders. If one fails, that
+ *    section shows a message instead of crashing, and the page keeps
+ *    listening, so it recovers on the next change.
  */
 async function StaffScreen() {
   await requireRole(["counter_staff"]);
 
-  let orders: QueueOrder[] = [];
-  let loadError = false;
-  try {
-    orders = await getActiveOrders();
-  } catch {
-    loadError = true;
-  }
+  // Read the queue and Past Orders at the same time (Promise.allSettled =
+  // wait for both; one failing doesn't stop the other from showing).
+  const [active, past] = await Promise.allSettled([getActiveOrders(), getPastOrders()]);
 
-  return <StaffQueue orders={orders} loadError={loadError} />;
+  return (
+    <StaffQueue
+      orders={active.status === "fulfilled" ? active.value : []}
+      loadError={active.status === "rejected"}
+      pastOrders={past.status === "fulfilled" ? past.value : []}
+      pastLoadError={past.status === "rejected"}
+    />
+  );
 }

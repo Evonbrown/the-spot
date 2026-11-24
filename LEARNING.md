@@ -967,3 +967,41 @@ Tapping an order in the queue opens **`/staff/orders/1004`**: the Order ID and s
 - *Can counter staff see the manager's phone number?* No. They can only read profiles of customers who have placed an order.
 - *Why a separate page instead of a pop-up?* Easier on phones, Back returns to the queue, and phone numbers are only sent when needed.
 - *What happens if the status changes while I'm looking at an order?* The page listens to that order through Realtime and refreshes itself.
+
+## Step 26: Status buttons and Past Orders (FR-03, SR-3.4 / SR-3.5 / AC-3)
+The staff order details page has an **Actions** box with **one button for the next step only** (e.g. "Mark In progress") and **Cancel order** (with "Are you sure?"). Every change is saved with **who** made it and **when** in `order_status_history`. `/staff` has a **Past orders (today)** section for Completed, Cancelled and Abandoned orders. Everything updates live. No Abandoned button yet; the full rules are Step 28 (Evon).
+
+| Status now | Pickup: next | Delivery: next |
+|---|---|---|
+| Pending | In progress | In progress |
+| In progress | Ready for pickup | Ready for pickup |
+| Ready for pickup | Completed | Being delivered |
+| Being delivered | (never) | Completed |
+| Completed / Cancelled / Abandoned | finished | finished |
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0009_order_status_changes.sql` | Data | **New.** `change_order_status()`: updates the status AND adds the history row in ONE transaction, only if the status is still what staff saw. Only the server may run it. |
+| `supabase/tests/0009_order_status_checks.sql` | Data | **New.** 3 checks: status + history saved together; "someone else changed it" changes nothing; staff can't run it themselves. |
+| `src/lib/order-status.ts` | Application | **Added** `nextStatus()`, `FINAL_STATUSES`, `isFinalStatus()`. |
+| `src/lib/orders/status-rules.ts` | Application | **New.** `checkStatusChange()`: THE rule (Step 26 minimum). Marked "STEP 28 (Evon)" where the full rules go. |
+| `src/lib/orders/status-actions.ts` | Application | **New.** `updateOrderStatus()` Server Action: counter staff only → fresh order → rule → save. |
+| `src/components/StatusButtons.tsx` | Presentation (browser) | **New.** Next-step button, Cancel with confirmation, "Saving…", messages. |
+| `src/app/staff/orders/[id]/page.tsx` | Presentation | Shows the Actions box. |
+| `src/lib/orders/get-queue.ts` | Application | **Added** `getPastOrders()`: today's finished orders, newest first. |
+| `src/components/StaffQueue.tsx`, `src/app/staff/page.tsx` | Presentation | The Past Orders section (loaded together with the queue). |
+| `src/lib/order-rules.ts` | Application | `jamaicaDayStart()` is now exported ("today" in Jamaica time). |
+
+### Key concepts
+- **Buttons show, the server decides:** the page only shows the next step, but a request can be sent without the page. So the server action checks again with the SAME `nextStatus()` the buttons use.
+- **One transaction for status + history:** like `create_order`, the database function saves both or neither, so there's never a status change without a record of who made it.
+- **Optimistic check ("someone else just changed it"):** the browser sends the status it SAW; the database only updates if it's still that status. Two staff tapping at once can't skip a step.
+- **Audit trail:** `order_status_history` (status, changed_by, changed_at) shows who did what and when. Step 28 uses it for the 20-minute Abandoned rule.
+- **A marked place for the next person:** `checkStatusChange()` is the ONE function every status change goes through, with a clear "STEP 28 (Evon)" note. That's how team members can build on each other's code safely.
+- **Promise.allSettled:** the queue and Past Orders load at the same time; if one fails, the other still shows.
+
+### Possible lecturer questions
+- *What stops staff from moving an order from Pending straight to Completed?* The page doesn't offer it, and the server refuses anything except the next step or Cancel.
+- *How do you know who cancelled an order?* `order_status_history.changed_by` records the staff member's id, and `changed_at` records when.
+- *What if two staff tap at the same time?* The database only changes the status if it's still what they saw; the second person gets "just updated by someone else".

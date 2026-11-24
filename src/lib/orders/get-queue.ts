@@ -4,6 +4,8 @@
  * WHAT: getActiveOrders(): loads every ACTIVE order (Pending, In progress,
  *       Ready for pickup, Being delivered) with its items, extras and
  *       delivery location, OLDEST FIRST, for the counter staff queue (FR-03).
+ *       getPastOrders() (Step 26): TODAY's finished orders, NEWEST first,
+ *       for the "Past Orders" section.
  *
  * LAYER: Application layer. The /staff page (Presentation) calls it; it reads
  *        the order tables (Data layer).
@@ -19,9 +21,10 @@
  */
 
 import "server-only";
+import { connection } from "next/server";
 import type { Size } from "@/lib/menu-helpers";
-import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/order-status";
-import type { Fulfilment } from "@/lib/order-rules";
+import { ACTIVE_STATUSES, FINAL_STATUSES, type OrderStatus } from "@/lib/order-status";
+import { jamaicaDayStart, type Fulfilment } from "@/lib/order-rules";
 import { createClient } from "@/lib/supabase/server";
 
 /*
@@ -116,5 +119,61 @@ export async function getActiveOrders(): Promise<QueueOrder[]> {
           .sort((a, b) => a.id - b.id)
           .map((extra) => extra.customization_name),
       })),
+  }));
+}
+
+// ---- Past Orders (Step 26) ----------------------------------------------------
+
+/* PastOrder: one row in "Past Orders" (a short line; details are one tap away). */
+export type PastOrder = {
+  id: number;
+  createdAt: number;
+  status: OrderStatus; // COMPLETED, CANCELLED or ABANDONED
+  fulfilment: Fulfilment;
+  locationName: string | null;
+};
+
+type PastRow = {
+  id: number;
+  created_at: string;
+  status: OrderStatus;
+  fulfilment: Fulfilment;
+  delivery_locations: { name: string } | null;
+};
+
+/*
+ * getPastOrders() -> TODAY's finished orders (Completed, Cancelled, Abandoned),
+ * NEWEST first, for "Past Orders" on /staff (FR-03).
+ * WHY today only (decision)? FR-06: counter staff may only see the current
+ * day's sales, and without a limit the list would grow forever.
+ * "Today" = since midnight JAMAICA time (the server runs on UTC).
+ * await connection(): this uses the current time, so Next.js must work it out
+ * for each real visit, never ahead of time (see get-profile.ts).
+ * THROWS if the database can't be reached; the page shows a message.
+ */
+export async function getPastOrders(): Promise<PastOrder[]> {
+  await connection();
+  const todayStart = new Date(jamaicaDayStart(Date.now())).toISOString();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, created_at, status, fulfilment, delivery_locations ( name )")
+    .in("status", FINAL_STATUSES)
+    .gte("created_at", todayStart)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (error) {
+    console.error("getPastOrders failed:", error.message);
+    throw new Error("Could not load past orders.");
+  }
+
+  return (data as unknown as PastRow[]).map((row) => ({
+    id: row.id,
+    createdAt: Date.parse(row.created_at),
+    status: row.status,
+    fulfilment: row.fulfilment,
+    locationName: row.delivery_locations?.name ?? null,
   }));
 }
