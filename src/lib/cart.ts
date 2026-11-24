@@ -85,10 +85,18 @@ export function addLine(
   cart: CartLine[],
   newLine: NewCartLine
 ): { cart: CartLine[]; capped: boolean } {
-  const existing = cart.find((line) => sameChoice(line, newLine));
+  // Keep quantity between 1 and MAX_QUANTITY even if a caller passes a bad number.
+  const addQty = Number.isFinite(newLine.quantity)
+    ? Math.min(MAX_QUANTITY, Math.max(1, Math.round(newLine.quantity)))
+    : 1;
+  // FR-02 / decision: trim and cap meal notes at MAX_NOTE_LENGTH characters.
+  const note = newLine.note.trim().slice(0, MAX_NOTE_LENGTH);
+  const cleanLine: NewCartLine = { ...newLine, quantity: addQty, note };
+
+  const existing = cart.find((line) => sameChoice(line, cleanLine));
 
   if (existing) {
-    const wanted = existing.quantity + newLine.quantity;
+    const wanted = existing.quantity + addQty;
     const quantity = Math.min(MAX_QUANTITY, wanted);
     return {
       cart: cart.map((line) => (line === existing ? { ...line, quantity } : line)),
@@ -96,9 +104,8 @@ export function addLine(
     };
   }
 
-  const quantity = Math.min(MAX_QUANTITY, newLine.quantity);
   return {
-    cart: [...cart, { ...newLine, quantity, lineId: makeLineId() }],
+    cart: [...cart, { ...cleanLine, lineId: makeLineId() }],
     capped: newLine.quantity > MAX_QUANTITY,
   };
 }
@@ -118,6 +125,7 @@ function makeLineId(): string {
  * (Going below 1 is not how you remove a line: use removeLine.)
  */
 export function setLineQuantity(cart: CartLine[], lineId: string, quantity: number): CartLine[] {
+  if (!Number.isFinite(quantity)) return cart;
   const safe = Math.min(MAX_QUANTITY, Math.max(1, Math.round(quantity)));
   return cart.map((line) => (line.lineId === lineId ? { ...line, quantity: safe } : line));
 }
@@ -180,11 +188,15 @@ export function parseCart(raw: string | null): CartLine[] {
 function isValidLine(value: unknown): value is CartLine {
   if (typeof value !== "object" || value === null) return false;
   const line = value as Record<string, unknown>;
+  const isPositiveInt = (n: unknown): n is number =>
+    typeof n === "number" && Number.isInteger(n) && n > 0;
   const isMoney = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
   return (
     typeof line.lineId === "string" &&
-    typeof line.itemId === "number" &&
+    line.lineId.length > 0 &&
+    isPositiveInt(line.itemId) &&
     typeof line.name === "string" &&
+    line.name.trim().length > 0 &&
     (line.size === null || line.size === "Small" || line.size === "Medium" || line.size === "Large") &&
     isMoney(line.unitPrice) &&
     Array.isArray(line.extras) &&
@@ -192,7 +204,7 @@ function isValidLine(value: unknown): value is CartLine {
       (extra: unknown) =>
         typeof extra === "object" &&
         extra !== null &&
-        typeof (extra as CartExtra).id === "number" &&
+        isPositiveInt((extra as CartExtra).id) &&
         typeof (extra as CartExtra).name === "string" &&
         isMoney((extra as CartExtra).extraPrice)
     ) &&

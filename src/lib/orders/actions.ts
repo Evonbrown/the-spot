@@ -128,9 +128,12 @@ function readInput(raw: unknown): PlaceOrderInput | null {
     isMoney(input.shownDeliveryFee) &&
     (input.timeChoice === "ASAP" || input.timeChoice === "LATER") &&
     (input.requestedTime === null ||
-      (typeof input.requestedTime === "number" && Number.isFinite(input.requestedTime))) &&
+      (input.timeChoice === "LATER" &&
+        typeof input.requestedTime === "number" &&
+        Number.isFinite(input.requestedTime))) &&
     (input.paymentMethod === "LYNK" || input.paymentMethod === "CASH") &&
-    Array.isArray(input.lines);
+    Array.isArray(input.lines) &&
+    input.lines.length <= 100;
   if (!okTop) return null;
 
   const linesOk = (input.lines as unknown[]).every((value) => {
@@ -139,6 +142,7 @@ function readInput(raw: unknown): PlaceOrderInput | null {
     return (
       isWholeNumber(line.itemId) &&
       typeof line.name === "string" &&
+      line.name.trim().length > 0 &&
       (line.size === null || line.size === "Small" || line.size === "Medium" || line.size === "Large") &&
       isMoney(line.unitPrice) &&
       typeof line.note === "string" &&

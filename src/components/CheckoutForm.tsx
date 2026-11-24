@@ -107,7 +107,10 @@ export default function CheckoutForm({
   // "Placing order…" and can't be pressed again.
   const [isPending, startTransition] = useTransition();
   // The server's last "no" (error + list of changes), shown above the button.
+  // We also remember which cart snapshot produced a "changes" error so if the
+  // customer updates their cart (here or in another tab), the stale list clears.
   const [failure, setFailure] = useState<Extract<PlaceOrderResult, { ok: false }> | null>(null);
+  const [failedCartKey, setFailedCartKey] = useState<string | null>(null);
   // The new Order ID once the order is saved.
   const [placedOrderId, setPlacedOrderId] = useState<number | null>(null);
   // The checkout's request id. useRef = a value React keeps between drawings
@@ -138,6 +141,7 @@ export default function CheckoutForm({
       shouldResetRef.current = false;
       setPlacedOrderId(null);
       setFailure(null);
+      setFailedCartKey(null);
       setFulfilment(null);
       setLocationId(null);
       setTimeChoice("ASAP");
@@ -193,9 +197,13 @@ export default function CheckoutForm({
   const openToday = canOrderToday(now, lead, hours);
   const earliest = earliestReadyTime(now, lead, hours);
   const slots = timeSlots(now, lead, hours);
+  // If no later slots exist today, fall back to ASAP so the form never stays
+  // stuck on a disabled "Later today" radio button.
+  const effectiveTimeChoice = timeChoice === "LATER" && slots.length === 0 ? "ASAP" : timeChoice;
   // If the chosen slot is no longer allowed (time moved on, or they switched to
-  // delivery, which needs longer), treat it as not chosen.
+  // delivery, which needs longer), treat it as not chosen and tell the customer.
   const chosenSlot = slot !== null && slots.includes(slot) ? slot : null;
+  const slotExpired = effectiveTimeChoice === "LATER" && slot !== null && chosenSlot === null;
 
   const location = locations.find((l) => l.id === locationId) ?? null;
 
@@ -204,12 +212,15 @@ export default function CheckoutForm({
   const subtotal = cartSubtotal(lines);
   const deliveryFee = fulfilment === "DELIVERY" && location ? location.deliveryFee : 0;
   const total = (Math.round(subtotal * 100) + Math.round(deliveryFee * 100)) / 100;
+  const cartSnapshot = lines.map((l) => `${l.lineId}:${l.quantity}`).join("|");
+  const visibleFailure =
+    failure && (!failure.changes || failedCartKey === cartSnapshot) ? failure : null;
 
   // What's still missing before the order could be placed (shown as a list).
   const missing: string[] = [];
   if (!fulfilment) missing.push("Choose pickup or delivery.");
   if (fulfilment === "DELIVERY" && !location) missing.push("Choose where to deliver.");
-  if (timeChoice === "LATER" && chosenSlot === null) missing.push("Choose a time.");
+  if (effectiveTimeChoice === "LATER" && chosenSlot === null) missing.push("Choose a time.");
   if (!payment) missing.push("Choose how to pay.");
 
   const canPlace = openToday && missing.length === 0 && !isPending;
@@ -222,7 +233,7 @@ export default function CheckoutForm({
    * gives us isPending.
    */
   function handlePlaceOrder() {
-    if (!canPlace || !fulfilment || !payment) return;
+    if (lines.length === 0 || !canPlace || !fulfilment || !payment) return;
     requestIdRef.current ??= makeRequestId(); // "??=" = only if not made yet
     setFailure(null);
 
@@ -231,8 +242,8 @@ export default function CheckoutForm({
       fulfilment,
       deliveryLocationId: fulfilment === "DELIVERY" ? locationId : null,
       shownDeliveryFee: deliveryFee,
-      timeChoice,
-      requestedTime: timeChoice === "LATER" ? chosenSlot : null,
+      timeChoice: effectiveTimeChoice,
+      requestedTime: effectiveTimeChoice === "LATER" ? chosenSlot : null,
       paymentMethod: payment,
       lines: lines.map((line) => ({
         itemId: line.itemId,
@@ -245,6 +256,7 @@ export default function CheckoutForm({
       })),
     };
 
+    const snapshot = cartSnapshot;
     startTransition(async () => {
       try {
         const result = await placeOrder(input);
@@ -260,11 +272,13 @@ export default function CheckoutForm({
           router.replace(`/orders/${result.orderId}`);
         } else {
           // Nothing was saved, so the same id is safe to reuse for a retry.
+          setFailedCartKey(result.changes ? snapshot : null);
           setFailure(result);
         }
       } catch {
         // The request itself failed (e.g. no internet). The order MAY have
         // reached the server, so we keep the same id: a retry can't double it.
+        setFailedCartKey(null);
         setFailure({ ok: false, error: "We couldn't reach the server. Check your connection and try again." });
       }
     });
@@ -312,7 +326,10 @@ export default function CheckoutForm({
                 type="radio"
                 name="fulfilment"
                 checked={fulfilment === "PICKUP"}
-                onChange={() => setFulfilment("PICKUP")}
+                onChange={() => {
+                  setFulfilment("PICKUP");
+                  setFailure(null);
+                }}
                 className="size-5 accent-brand"
               />
               <span>
@@ -325,7 +342,10 @@ export default function CheckoutForm({
                 type="radio"
                 name="fulfilment"
                 checked={fulfilment === "DELIVERY"}
-                onChange={() => setFulfilment("DELIVERY")}
+                onChange={() => {
+                  setFulfilment("DELIVERY");
+                  setFailure(null);
+                }}
                 disabled={locations.length === 0}
                 className="size-5 accent-brand"
               />
@@ -351,7 +371,10 @@ export default function CheckoutForm({
                       type="radio"
                       name="location"
                       checked={locationId === l.id}
-                      onChange={() => setLocationId(l.id)}
+                      onChange={() => {
+                        setLocationId(l.id);
+                        setFailure(null);
+                      }}
                       className="size-5 accent-brand"
                     />
                     <span className="flex-1 font-semibold">{l.name}</span>
@@ -393,8 +416,11 @@ export default function CheckoutForm({
                   <input
                     type="radio"
                     name="time"
-                    checked={timeChoice === "ASAP"}
-                    onChange={() => setTimeChoice("ASAP")}
+                    checked={effectiveTimeChoice === "ASAP"}
+                    onChange={() => {
+                      setTimeChoice("ASAP");
+                      setFailure(null);
+                    }}
                     className="size-5 accent-brand"
                   />
                   <span>
@@ -409,33 +435,46 @@ export default function CheckoutForm({
                   <input
                     type="radio"
                     name="time"
-                    checked={timeChoice === "LATER"}
-                    onChange={() => setTimeChoice("LATER")}
+                    checked={effectiveTimeChoice === "LATER"}
+                    onChange={() => {
+                      setTimeChoice("LATER");
+                      setFailure(null);
+                    }}
                     disabled={slots.length === 0}
                     className="size-5 accent-brand"
                   />
                   <span className="font-semibold">Later today</span>
                 </label>
 
-                {timeChoice === "LATER" && slots.length > 0 && (
-                  <label className="mt-1 block text-sm font-semibold">
-                    Choose a time
-                    {/* text-base (16px) stops iPhones zooming in on the box */}
-                    <select
-                      value={chosenSlot ?? ""}
-                      onChange={(event) => setSlot(Number(event.target.value))}
-                      className="mt-1 block min-h-12 w-full rounded-lg border border-stone-300 bg-white px-3 text-base"
-                    >
-                      <option value="" disabled>
-                        Pick a time…
-                      </option>
-                      {slots.map((t) => (
-                        <option key={t} value={t}>
-                          {formatJamaicaTime(t)}
+                {effectiveTimeChoice === "LATER" && slots.length > 0 && (
+                  <div className="mt-1">
+                    <label className="block text-sm font-semibold">
+                      Choose a time
+                      {/* text-base (16px) stops iPhones zooming in on the box */}
+                      <select
+                        value={chosenSlot ?? ""}
+                        onChange={(event) => {
+                          setSlot(Number(event.target.value));
+                          setFailure(null);
+                        }}
+                        className="mt-1 block min-h-12 w-full rounded-lg border border-stone-300 bg-white px-3 text-base"
+                      >
+                        <option value="" disabled>
+                          Pick a time…
                         </option>
-                      ))}
-                    </select>
-                  </label>
+                        {slots.map((t) => (
+                          <option key={t} value={t}>
+                            {formatJamaicaTime(t)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {slotExpired && (
+                      <p role="status" className="mt-1 text-sm text-amber-900">
+                        That time is no longer available. Please pick a new time.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </>
@@ -454,7 +493,10 @@ export default function CheckoutForm({
                 type="radio"
                 name="payment"
                 checked={payment === "LYNK"}
-                onChange={() => setPayment("LYNK")}
+                onChange={() => {
+                  setPayment("LYNK");
+                  setFailure(null);
+                }}
                 className="size-5 accent-brand"
               />
               <span>
@@ -469,7 +511,10 @@ export default function CheckoutForm({
                 type="radio"
                 name="payment"
                 checked={payment === "CASH"}
-                onChange={() => setPayment("CASH")}
+                onChange={() => {
+                  setPayment("CASH");
+                  setFailure(null);
+                }}
                 className="size-5 accent-brand"
               />
               <span>
@@ -538,13 +583,13 @@ export default function CheckoutForm({
 
         {/* The server said no: why, and (decision) EXACTLY what changed.
             role="alert" makes screen readers read it out at once. */}
-        {failure && (
+        {visibleFailure && (
           <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-900">
-            <p className="font-semibold">{failure.error}</p>
-            {failure.changes && (
+            <p className="font-semibold">{visibleFailure.error}</p>
+            {visibleFailure.changes && (
               <>
                 <ul className="mt-2 list-disc pl-5">
-                  {failure.changes.map((change) => (
+                  {visibleFailure.changes.map((change) => (
                     <li key={change}>{change}</li>
                   ))}
                 </ul>

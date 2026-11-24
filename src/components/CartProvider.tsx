@@ -108,6 +108,8 @@ export default function CartProvider({ children }: { children: ReactNode }) {
   // quantity 1, no size, no extras, no note.
   const addSingleItem = useCallback(
     (item: MenuItem) => {
+      // FR-01: unavailable items (or items missing a price) cannot be added.
+      if (!item.isAvailable || item.priceOptions.length === 0) return;
       addToCart({
         itemId: item.id,
         name: item.name,
