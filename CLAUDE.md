@@ -67,6 +67,7 @@ Rules:
 - Scheduling: "As soon as possible" or a time later TODAY in 15-minute steps (same day only), Jamaica time (UTC-5, no DST), within 11:00-19:00 and the FR-01 lead times.
 - Order IDs start at 1001. `client_request_id` (unique) prevents duplicate orders from double taps/retries.
 - Lynk QR: a clearly marked SAMPLE placeholder (no QR package).
+- Payment step (Part 23, on /orders/[id]): Lynk = SAMPLE QR from generateLynkQRCode() (src/lib/payments/lynk.ts; looks like a QR, cannot be scanned), amount = order total, reference = Order ID, "a supervisor will confirm your payment", plus the Lynk ID to type in (phones can't scan their own screen). The Lynk ID is a SAMPLE (`LYNK_ID` in src/lib/store-info.ts, shown as "[sample Lynk ID]" so no real account can receive money) until the client/Supervisor gives the real one; then set LYNK_ID_CONFIRMED = true. Cash: "Pay J$X at the counter" (pickup) / "Pay J$X to the driver" (delivery).
 - Names: fulfilment PICKUP / DELIVERY; payment method LYNK / CASH; payment status UNPAID (PAID, REFUNDED added in Build step 7). Cash is allowed for pickup and delivery (paid to the driver).
 - IMPORTANT for Build step 7 (FR-06 counts PAID orders only): cash orders must be marked PAID when the cash is received (at the counter or by the driver), and Lynk orders when the Supervisor verifies them. Otherwise revenue reports would miss them. Descriptions empty until the client says what comes with each meal.
 

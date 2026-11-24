@@ -18,6 +18,18 @@ import { formatPrice } from "@/lib/menu-helpers";
 export const OPENING_HOURS = "11:00 a.m. – 7:00 p.m.";
 
 /*
+ * The Spot's Lynk ID, so customers ordering on a phone can pay by typing it
+ * into the Lynk app (you can't scan a QR code shown on your OWN screen).
+ * FR-02, Part 23 (decision): a SAMPLE until the client / Supervisor gives the
+ * real one. Then: put the real ID here and set LYNK_ID_CONFIRMED to true.
+ * WHY a value in brackets, not something like "@thespot"? A made-up handle
+ * might belong to a REAL stranger, and a customer could send them real money.
+ * "[sample Lynk ID]" can't be a real account.
+ */
+export const LYNK_ID = "[sample Lynk ID]";
+export const LYNK_ID_CONFIRMED = false;
+
+/*
  * DeliveryLocation: one place The Spot delivers to (table delivery_locations,
  * see migration 0005). Edited by the Manager without code changes
  * (Maintainability).

@@ -17,8 +17,10 @@
  * [id] IN THE FOLDER NAME = a "dynamic route": one page file for every order.
  * The part of the address after /orders/ arrives as params.id ("1001").
  *
+ * PART 23 (FR-02): the "How to pay" box (PaymentInstructions): a SAMPLE
+ * Lynk QR code with amount, reference and Lynk ID, or the cash message.
+ *
  * NOT HERE YET:
- *   - Part 23 (Junelle, FR-02): the Lynk QR code and payment instructions.
  *   - Build step 5 (FR-05): the live order status.
  *   - Payment status ("not paid yet"): decision, not shown for now.
  */
@@ -26,6 +28,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import PaymentInstructions from "@/components/PaymentInstructions";
 import { requireRole } from "@/lib/auth/require-role";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
 import { formatJamaicaDateTime, formatJamaicaTime } from "@/lib/order-rules";
@@ -174,9 +177,16 @@ function OrderInvoice({ order }: { order: OrderDetails }) {
             </dd>
           </div>
         </dl>
-        {/* PART 23 (Junelle, FR-02): the Lynk QR code and payment
-            instructions go here. Decision: no payment status shown yet. */}
       </section>
+
+      {/* ---- How to pay (Part 23, FR-02): sample Lynk QR, or cash at the
+          counter / to the driver. Decision: no payment status shown yet. ---- */}
+      <PaymentInstructions
+        orderId={order.id}
+        total={order.total}
+        fulfilment={order.fulfilment}
+        paymentMethod={order.paymentMethod}
+      />
 
       {/* ---- Items and totals (FR-02: items + extras + delivery fee) ---- */}
       <section className="mt-4 rounded-xl bg-white p-5 shadow-sm">

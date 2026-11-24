@@ -889,3 +889,29 @@ After "Place order", the customer goes to **`/orders/1001`**. It shows the **Ord
 - *What if I type someone else's order number in the address?* RLS returns nothing, so you see "Order not found", exactly like a number that doesn't exist.
 - *Why not use the secret key to read the order?* It skips RLS. Reading with the customer's own login means the database itself guarantees they only see their own orders.
 - *If the Manager changes a price tomorrow, does my invoice change?* No. The price is copied into `order_items` when you order.
+
+## Part 23: How to pay (sample Lynk QR, cash instructions)
+The confirmation page now has a **"How to pay"** box (FR-02):
+- **Lynk:** a **SAMPLE** QR code, the **amount** (order total), the **payment reference** (the Order ID), the **Lynk ID** to type into the Lynk app, and "A supervisor will confirm your payment."
+- **Cash + pickup:** "Pay J$X at the counter." **Cash + delivery:** "Pay J$X to the driver when your food arrives."
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `src/lib/payments/lynk.ts` | Application (external service: Lynk) | **New.** `generateLynkQRCode({ orderId, amount })` (SDS name): who to pay, how much, the reference, and a sample QR pattern (`isSample: true`). |
+| `src/components/PaymentInstructions.tsx` | Presentation | **New.** Draws the box: the QR as an SVG picture with a red SAMPLE band, or the cash message. |
+| `src/lib/store-info.ts` | Application | **New values** `LYNK_ID` / `LYNK_ID_CONFIRMED`: The Spot's Lynk ID, a sample for now. |
+| `src/app/orders/[id]/page.tsx` | Presentation | Shows `<PaymentInstructions>` under the order details. |
+
+### Key concepts
+- **Simulating an external service:** we're not connected to Lynk, so `generateLynkQRCode()` makes a picture that only *looks* like a QR code (no phone can scan it) and says `isSample: true`. When Lynk is really connected, only this one function changes; the page stays the same. That's the point of keeping external services in the Application layer.
+- **Pseudo-random:** the pattern comes from a formula (mulberry32) that gives random-looking numbers, but the SAME numbers for the same starting value ("seed"). The seed is the Order ID + amount, so order 1001 always shows the same pattern and 1002 a different one. `Math.random()` would change it on every refresh.
+- **Why the Order ID is the reference:** the Supervisor (who verifies Lynk payments) sees "1001" on the payment and knows which order it's for.
+- **Why also a Lynk ID:** most customers order on their phone and can't scan a QR code on their own screen; they type the ID into the Lynk app instead.
+- **Why "[sample Lynk ID]" and not "@thespot":** a made-up handle might belong to a real person, and a customer could send them real money. The bracketed placeholder can't be a real account.
+- **SVG:** a picture described as shapes. One `<path>` draws all the little squares, so it stays sharp at any size and needs no image file or package.
+
+### Possible lecturer questions
+- *Can a customer really pay with this QR code?* No. It's a clearly marked sample; the real Lynk connection is simulated for now (SRS: external services simulated).
+- *How does the Supervisor know which order a Lynk payment belongs to?* The customer uses the Order ID as the payment reference.
+- *What changes when the client gives the real Lynk ID?* One line in `store-info.ts` (and `LYNK_ID_CONFIRMED = true`); no other code.
