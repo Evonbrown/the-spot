@@ -28,13 +28,17 @@ import {
  * passed into a function. Example: <MenuItemCard item={jerkChicken} />
  * customizations = the extras offered in the options panel (FR-02; the same
  * list for every food item, by decision).
+ * canOrder (default true): false = staff are looking (decision: staff don't
+ * order through the app), so the "Add" button is left out.
  */
 export default function MenuItemCard({
   item,
   customizations,
+  canOrder = true,
 }: {
   item: MenuItem;
   customizations: Customization[];
+  canOrder?: boolean;
 }) {
   // FR-01: unavailable items are greyed out and cannot be added.
   const unavailable = !item.isAvailable;
@@ -102,7 +106,7 @@ export default function MenuItemCard({
           {singlePrice ? formatPrice(fromPrice) : `From ${formatPrice(fromPrice)}`}
         </span>
 
-        {singlePrice ? (
+        {!canOrder ? null : singlePrice ? (
           // A single-price item has nothing to choose: one tap adds 1 to the cart.
           <QuickAddButton item={item} className="px-5" />
         ) : (

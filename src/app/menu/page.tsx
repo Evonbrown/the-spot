@@ -7,9 +7,18 @@
  *        src/lib/menu.ts), which reads the menu_items table (Data layer).
  *
  * In Next.js the folder name becomes the web address: app/menu/page.tsx = "/menu".
+ *
+ * STAFF VIEW (decision: staff don't order through the app): when a staff
+ * member (counter staff, delivery staff, manager, supervisor) opens the menu,
+ * the "Add" buttons are hidden and a short note says so. Customers and
+ * visitors see the menu exactly as before. This is only about what the page
+ * SHOWS; placing an order is still refused on the server for anyone who
+ * isn't a customer (placeOrder, Part 21).
  */
 
+import { Suspense } from "react";
 import MenuBrowser from "@/components/MenuBrowser";
+import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { getCustomizations } from "@/lib/customizations";
 import { getMenuItems } from "@/lib/menu";
 import type { Customization, MenuItem } from "@/lib/menu-helpers";
@@ -61,9 +70,38 @@ export default async function MenuPage() {
         // The table is empty (e.g. before the Manager adds items).
         <MenuMessage text="There are no menu items yet. Please check back soon." />
       ) : (
-        <MenuBrowser items={items} customizations={customizations} />
+        // WHO is looking is only known per visit (login cookie), so that part
+        // sits inside <Suspense>. The fallback is the normal menu, shown at
+        // once (the page stays fast, PR-1); for staff it is then swapped for
+        // the staff view a moment later.
+        <Suspense fallback={<MenuBrowser items={items} customizations={customizations} />}>
+          <MenuForViewer items={items} customizations={customizations} />
+        </Suspense>
       )}
     </main>
+  );
+}
+
+/*
+ * MenuForViewer (runs on the server, per visit)
+ * Logged out or a customer -> the normal menu (with "Add" buttons).
+ * Any staff role           -> the note + the menu WITHOUT "Add" buttons.
+ */
+async function MenuForViewer({ items, customizations }: { items: MenuItem[]; customizations: Customization[] }) {
+  const profile = await getCurrentProfile();
+  const isStaff = profile !== null && profile.role !== "customer";
+
+  if (!isStaff) {
+    return <MenuBrowser items={items} customizations={customizations} />;
+  }
+
+  return (
+    <>
+      <p role="note" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+        Staff view — customers order from this menu.
+      </p>
+      <MenuBrowser items={items} customizations={customizations} canOrder={false} />
+    </>
   );
 }
 

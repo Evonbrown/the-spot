@@ -15,6 +15,9 @@
  * Same rules as the card:
  *   - FR-01: unavailable items are greyed out and can't be added.
  *   - SAF-2: allergens are always shown, even in the compact row.
+ *
+ * canOrder (default true): false = staff are looking (decision: staff don't
+ * order through the app), so the "Add" button is left out.
  */
 
 import QuickAddButton from "@/components/QuickAddButton";
@@ -25,7 +28,7 @@ import { allergenText, formatPrice, type MenuItem } from "@/lib/menu-helpers";
  * Prop: item = a single-price item. Its price is priceOptions[0].price.
  * Rendered as an <li> (list item), because the rows sit inside a <ul> list.
  */
-export default function MenuItemRow({ item }: { item: MenuItem }) {
+export default function MenuItemRow({ item, canOrder = true }: { item: MenuItem; canOrder?: boolean }) {
   const unavailable = !item.isAvailable;
   const price = item.priceOptions[0].price;
 
@@ -60,7 +63,7 @@ export default function MenuItemRow({ item }: { item: MenuItem }) {
       <span className="shrink-0 font-bold">{formatPrice(price)}</span>
 
       {/* One tap adds 1 to the cart (Part 16). Greyed out when unavailable. */}
-      <QuickAddButton item={item} className="px-4 text-sm" />
+      {canOrder && <QuickAddButton item={item} className="px-4 text-sm" />}
     </li>
   );
 }

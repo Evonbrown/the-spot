@@ -39,13 +39,17 @@ import {
  *   items          = ALL menu items, in sort_order (loaded by the server).
  *   customizations = the extras for the options panel (FR-02), also loaded by
  *                    the server. Passed on to every food card.
+ *   canOrder       = false when STAFF are looking: no "Add" buttons
+ *                    (default true: customers and visitors).
  */
 export default function MenuBrowser({
   items,
   customizations,
+  canOrder = true,
 }: {
   items: MenuItem[];
   customizations: Customization[];
+  canOrder?: boolean;
 }) {
   // What the customer has typed. Every key press updates it and React redraws
   // the list below with only the matching items.
@@ -137,7 +141,7 @@ export default function MenuBrowser({
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {cardItems.map((item) => (
                       // "key" helps React keep track of each card in the list
-                      <MenuItemCard key={item.id} item={item} customizations={customizations} />
+                      <MenuItemCard key={item.id} item={item} customizations={customizations} canOrder={canOrder} />
                     ))}
                   </div>
                 )}
@@ -158,7 +162,7 @@ export default function MenuBrowser({
                     } ${cardItems.length > 0 ? "mt-4" : ""}`}
                   >
                     {rowItems.map((item) => (
-                      <MenuItemRow key={item.id} item={item} />
+                      <MenuItemRow key={item.id} item={item} canOrder={canOrder} />
                     ))}
                   </ul>
                 )}
