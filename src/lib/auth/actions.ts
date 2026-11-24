@@ -19,15 +19,13 @@ import { redirect } from "next/navigation";
 import { isValidEmail, isValidPhone, parseLoginIdentifier, readStudentIdInput } from "@/lib/auth/identifier";
 import type { UserRole } from "@/lib/auth/roles";
 import { pathAfterLogin } from "@/lib/auth/safe-next";
+import { failedLoginMessage, LOGIN_FAILED, lockedMessage } from "@/lib/auth/login-messages";
+import { LOCK_AFTER_FAILS, lockMinutes } from "@/lib/auth/security-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-/*
- * Step 39a: the ONE message for every failed login (unknown email, unknown
- * student ID or wrong password), so nobody can find out which emails or
- * student IDs have accounts.
- */
-const LOGIN_FAILED = "Email/student ID or password is incorrect.";
+// The failed-login messages (one message for every failure, "N tries left",
+// "Try again at ...") live in login-messages.ts (Steps 39a / 39b).
 
 /*
  * findAccount(identifier) -> { userId, email } or null.
@@ -43,6 +41,79 @@ async function findAccount(identifier: string): Promise<{ userId: string; email:
   }
   const row = (data as { user_id: string; email: string }[] | null)?.[0];
   return row ? { userId: row.user_id, email: row.email } : null;
+}
+
+// =============================================================================
+// Step 39b (SRS Section 3): lock for 15 minutes after 5 failed logins in a row.
+// The count lives in the DATABASE (login_attempts, migration 0023), which only
+// our server can use (secret key), so it can't be reset from the browser.
+// If one of these database calls fails, we log it and carry on (the login
+// still works and still checks the password): a broken counter must not lock
+// everybody out.
+// =============================================================================
+
+/*
+ * afterFailureMessage(userId, identifier): the message after a failure that
+ * did NOT lock: the plain one, or (from the 3rd failure in a row) with
+ * "N tries left before a 15-minute lock." The count comes from the database
+ * (login_failed_count, migration 0024). Unknown emails / IDs are counted the
+ * same way, so they get the same message.
+ */
+async function afterFailureMessage(userId: string | null, identifier: string): Promise<string> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("login_failed_count", { p_user_id: userId, p_identifier: identifier });
+  if (error || typeof data !== "number") {
+    if (error) console.error("login_failed_count failed:", error.message);
+    return LOGIN_FAILED;
+  }
+  return failedLoginMessage(data, LOCK_AFTER_FAILS, lockMinutes());
+}
+
+/* Is this account (or unknown email / ID) locked right now? -> until when, or null. */
+async function lockStatus(userId: string | null, identifier: string): Promise<Date | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("login_lock_status", { p_user_id: userId, p_identifier: identifier });
+  if (error) {
+    console.error("login_lock_status failed:", error.message);
+    return null;
+  }
+  return typeof data === "string" ? new Date(data) : null;
+}
+
+/* One more failure. -> "locked until" if THIS failure locked it, else null. */
+async function recordFailure(userId: string | null, identifier: string): Promise<Date | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("login_record_failure", {
+    p_user_id: userId,
+    p_identifier: identifier,
+    p_max_fails: LOCK_AFTER_FAILS,
+    p_lock_minutes: lockMinutes(),
+  });
+  if (error) {
+    console.error("login_record_failure failed:", error.message);
+    return null;
+  }
+  return typeof data === "string" ? new Date(data) : null;
+}
+
+/* A good login: forget the failures. */
+async function recordSuccess(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("login_record_success", { p_user_id: userId });
+  if (error) console.error("login_record_success failed:", error.message);
+}
+
+/*
+ * banAccount(userId): ALSO lock the account inside Supabase Auth for the same
+ * time ("ban_duration", e.g. "15m"). WHY? Supabase's login address is public:
+ * someone could skip our form and send passwords to it straight from code.
+ * Our counter wouldn't see those, but a BANNED account can't log in by any
+ * route. The ban ends by itself.
+ */
+async function banAccount(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { ban_duration: `${lockMinutes()}m` });
+  if (error) console.error("banAccount failed:", error.message);
 }
 
 /*
@@ -160,6 +231,8 @@ export async function signUp(
  *     emails, and still checks the password itself (hashed).
  * Every failure gives the SAME message (LOGIN_FAILED), whether the ID or
  * email doesn't exist or the password is wrong.
+ * Step 39b: 5 failures in a row lock it for 15 minutes ("Try again at ..."),
+ * and from the 3rd failure the message says how many tries are left.
  */
 export async function logIn(
   prevState: AuthFormState,
@@ -175,23 +248,54 @@ export async function logIn(
     return { error: "Please enter your password.", fields };
   }
 
-  // Which email do we log in with?
-  let email: string | null = identifier.value;
-  if (identifier.kind === "studentId") {
-    const account = await findAccount(identifier.value);
-    email = account?.email ?? null; // unknown ID -> no email -> same failure message
+  // Which account is it? (By email OR student ID: the same account either
+  // way, so failures with both add up, Step 39b.) null = no such account.
+  const account = await findAccount(identifier.value);
+  const userId = account?.userId ?? null;
+
+  // ---- Step 39b: is it LOCKED right now? Then stop here, WITHOUT trying the
+  // password (otherwise someone could keep guessing during the lock).
+  const lockedUntil = await lockStatus(userId, identifier.value);
+  if (lockedUntil) return { error: lockedMessage(lockedUntil), fields };
+
+  // Unknown email / student ID: count it as a failure too (decision: so a
+  // lock never proves an account exists), and give the SAME message.
+  if (!account) {
+    const locked = await recordFailure(null, identifier.value);
+    return { error: locked ? lockedMessage(locked) : await afterFailureMessage(null, identifier.value), fields };
   }
-  if (!email) return { error: LOGIN_FAILED, fields };
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: account.email, password });
 
   if (error) {
+    // Still banned in Supabase Auth (the ban and our lock end at almost the
+    // same moment): not a new failure, just "wait a little".
+    if (error.code === "user_banned") {
+      return { error: "Too many failed attempts. Please try again in a minute.", fields };
+    }
+    // A WRONG PASSWORD counts. (Other problems, e.g. a network error or an
+    // unconfirmed email, don't: they aren't guesses.)
+    if (error.code === "invalid_credentials") {
+      const locked = await recordFailure(userId, identifier.value);
+      if (locked) {
+        await banAccount(account.userId);
+        return { error: lockedMessage(locked), fields };
+      }
+      // Not locked yet: from the 3rd failure, say how many tries are left
+      // (the SAME wording an unknown email / ID gets above).
+      return { error: await afterFailureMessage(userId, identifier.value), fields };
+    } else {
+      console.error("logIn: sign-in failed:", error.code, error.message);
+    }
     // SECURITY: always the SAME message, whether the email / student ID
     // doesn't exist or the password is wrong. Otherwise an attacker could
     // find out which emails and student IDs have accounts.
     return { error: LOGIN_FAILED, fields };
   }
+
+  // Step 39b: a good login forgets the earlier failures.
+  await recordSuccess(data.user.id);
 
   // Send each role to its own screen (e.g. counter_staff -> /staff).
   // We read the role from the database (RLS lets a user read their own profile),

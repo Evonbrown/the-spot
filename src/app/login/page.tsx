@@ -10,6 +10,7 @@
 import { Suspense } from "react";
 import LoginForm from "@/components/LoginForm";
 import RedirectIfLoggedIn from "@/components/RedirectIfLoggedIn";
+import { isShortSecurityTimersOn } from "@/lib/test-settings";
 
 /*
  * searchParams (the ?next=... part of the address) is handed to
@@ -31,6 +32,13 @@ export default function LoginPage({
       <p className="mt-1 mb-6 text-sm text-stone-600">
         Customers and staff log in here, with your email or student ID.
       </p>
+      {/* Step 39b: only on a laptop with TEST_SHORT_SECURITY_TIMERS=true (never live). */}
+      {isShortSecurityTimersOn() && (
+        <p className="mb-4 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+          TEST MODE: short security timers (a login lock lasts 1 minute instead of 15). This only works with npm
+          run dev on your own computer.
+        </p>
+      )}
       {/* The form reads ?next=... (e.g. /checkout) with useSearchParams, which
           Next.js requires to sit inside <Suspense>. The fallback is a plain
           grey box, NOT a second form, so there is never a copy without "next". */}

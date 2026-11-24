@@ -45,6 +45,20 @@ export function isIgnoreOpeningHoursOn(): boolean {
 }
 
 /*
+ * isShortSecurityTimersOn() (Step 39) -> true only when BOTH locks are open:
+ * NODE_ENV is "development" AND .env.local has TEST_SHORT_SECURITY_TIMERS=true.
+ * Then the login lock lasts 1 minute instead of 15 (and, in Step 39c, staff
+ * are logged out after 2 minutes idle instead of 30), so we can test without
+ * waiting. Same two locks as above: it can never work on the live site.
+ */
+export function isShortSecurityTimersOn(): boolean {
+  return (
+    process.env.NODE_ENV === "development" &&
+    process.env.TEST_SHORT_SECURITY_TIMERS === "true"
+  );
+}
+
+/*
  * getOpeningHours() -> the hours the order rules should use right now:
  * the real FR-01 hours, or "open all day" while testing on a laptop.
  * Used by the checkout page (Part 20) and the placeOrder action (Part 21), so

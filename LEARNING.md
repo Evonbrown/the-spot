@@ -6,9 +6,9 @@ One section per part we build. Read these before presentations.
 
 ## ⚠️ Before deploying to Vercel (checklist)
 - [ ] **Turn email confirmation back ON:** Supabase dashboard → Authentication → Sign In / Providers → Email → "Confirm email". We switched it OFF during development (Part 2) so testing is faster. Supabase's free email service only sends a few emails per hour.
-- [ ] Delete the temporary `/test-connection` page (Part 1).
+- [x] Delete the temporary `/test-connection` page (Part 1). Done by Junelle (commit 991c066).
 - [ ] **Run every migration and seed in Supabase BEFORE the first build/deploy** (in the order listed in README.md). The build pre-builds pages using the database and stops if a table is missing (found in Part 18).
-- [ ] **Decide on student ID login** before Build step 8. The SRS says users log in with "email or student ID", but we built **email only** (Part 4). Decide whether to add student ID login, and how non-students would log in.
+- [x] **Decide on student ID login** before Build step 8. Decided and built in Step 39a: email OR student ID; people without one use their email.
 
 ---
 
@@ -22,7 +22,7 @@ One section per part we build. Read these before presentations.
 | `.env.local` | config | Stores the Supabase Project URL and publishable key. Ignored by git, so it never reaches GitHub. |
 | `src/lib/supabase/client.ts` | Presentation ↔ Data bridge | `createClient()` for **browser** code ("use client" components). |
 | `src/lib/supabase/server.ts` | Application layer | `createClient()` for **server** code (Server Components, Server Actions, Route Handlers). Reads the login session from cookies. |
-| `src/app/test-connection/page.tsx` | Presentation (temporary) | Shows whether the app can reach Supabase. |
+| `src/app/test-connection/page.tsx` | Presentation (temporary) | Shows whether the app can reach Supabase. *(Deleted later by Junelle, commit 991c066: no longer needed.)* |
 | `package.json` | n/a | Added `@supabase/supabase-js` (talks to Supabase) and `@supabase/ssr` (makes it work with Next.js cookies). |
 
 ### Key concepts
@@ -166,7 +166,7 @@ One section per part we build. Read these before presentations.
 | `src/proxy.ts` | Application | Also sends **logged-out** visitors away from `/staff`, `/driver`, `/manager` and `/supervisor`. |
 | `src/lib/auth/actions.ts` | Application | `logIn` now reads your role from the database and sends you to your screen. |
 | `src/app/staff`, `driver`, `manager`, `supervisor` (`page.tsx`) | Presentation | Placeholder screens. Each one calls `requireRole` itself. |
-| `src/components/ScreenPlaceholder.tsx` | Presentation | The shared "coming soon" box for those screens (temporary). |
+| `src/components/ScreenPlaceholder.tsx` | Presentation | The shared "coming soon" box for those screens (temporary). *(Deleted by Junelle, commit 991c066, once every screen was built.)* |
 | `src/app/no-access/page.tsx` | Presentation | "You don't have access to this page", with a button to your own screen. |
 | `src/components/RedirectIfLoggedIn.tsx` | Presentation | On `/login` and `/signup`: if you're already logged in, it sends you to your screen. |
 | `src/components/SiteHeader.tsx` | Presentation | Staff see a link to their own screen (Queue / Deliveries / Reports / Payments) instead of "Menu". |
@@ -1521,3 +1521,36 @@ The rules (server action AND database): **only the Supervisor**; only a **paid**
 - *How does student ID login work if Supabase only uses emails?* The server finds the email for that ID, then logs in normally.
 - *Can someone find out if a student ID is registered by trying to log in?* No: same message for every failure, and the lookup function is server-only (block 7).
 - *Can two people use the same student ID?* No: the database's UNIQUE rule (block 2).
+
+## Step 39b: Lock the account after 5 failed logins (SRS Section 3, Security)
+- **5 failed logins in a row** (email OR student ID, they add up) -> the account is **locked for 15 minutes**: "Too many failed attempts. Try again at 2:45 p.m."
+- While locked, the password isn't even tried (no guessing during the lock). A **good login resets** the count. After a lock, the person gets 5 new tries.
+- **Unknown emails / student IDs lock too** (decision), with the same message, so a lock never proves an account exists. For those only a HASH of what was typed is stored.
+- **Can't be bypassed:** the count is in the database, which only our server can use. On the 5th failure the server also **bans the account in Supabase Auth** for 15 minutes, so it can't log in by any route (even by calling Supabase's login address directly, skipping our form). The ban ends by itself.
+- **Warning before the lock:** from the 3rd failure in a row: "Email/student ID or password is incorrect. **2 tries left** before a 15-minute lock." (then "1 try left"). Unknown emails / IDs get exactly the same warning, so it reveals nothing.
+- **Quick testing:** `TEST_SHORT_SECURITY_TIMERS=true` in `.env.local` + restart `npm run dev` -> the lock lasts 1 minute (a TEST MODE note shows on the login page). Or unlock at once in the SQL Editor (see the top of the test file).
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0023_login_lockout.sql` | Data | **New.** `login_attempts` (server only), `login_lock_status`, `login_record_failure`, `login_record_success`. |
+| `supabase/tests/0023_login_lockout_checks.sql` | Data | **New.** 8 checks: 4 don't lock, 5th locks, success resets, email + student ID add up, unknown locks (hash only), lock ends, test-mode minutes, no public access. Plus "how to unlock". |
+| `supabase/migrations/0024_login_tries_left.sql` (+ tests) | Data | **New.** `login_failed_count()` (server only) for the "N tries left" warning (a new file because 0023 was already run). |
+| `src/lib/auth/login-messages.ts` | Application | **New.** `LOGIN_FAILED`, `failedLoginMessage()` (tries left from the 3rd failure), `lockedMessage()`. |
+| `src/lib/auth/security-settings.ts` | Application | **New.** `LOCK_AFTER_FAILS = 5`, `lockMinutes()` (15, or 1 in test mode). |
+| `src/lib/test-settings.ts` | Application | `isShortSecurityTimersOn()` (dev only + .env.local). |
+| `src/lib/auth/actions.ts` | Application | `logIn`: check lock -> try password -> count failure / reset; ban on lock. |
+| `src/app/login/page.tsx` | Presentation | TEST MODE note. |
+
+### Key concepts
+- **Brute-force protection:** without a limit, a program could try thousands of passwords. 5 tries then 15 minutes makes that useless.
+- **Server-side state:** the count is in the database, not in the browser (a cookie or page could simply be deleted).
+- **Defence in depth:** our counter (our form) + the Supabase ban (every route) + Supabase's own per-IP rate limit for direct calls.
+- **Atomic upsert:** "insert ... on conflict do update" adds or changes the row in one step, so two failures at the same moment are both counted.
+- **Hashing:** sha256 turns "nobody@example.com" into a fixed fingerprint; we can recognise the same text again without keeping it.
+- **Trade-off:** someone who knows your email could lock you out for 15 minutes on purpose. That's the price of the SRS rule; the lock ends by itself.
+
+### Possible lecturer questions
+- *What stops an attacker from just clearing cookies to reset the counter?* The count is in the database, per account, not in the browser.
+- *What if they skip our login page and call Supabase directly?* After the 5th failure the account is banned inside Supabase Auth itself; before that, Supabase's per-IP rate limit applies.
+- *Does a lock reveal that an email has an account?* No: unknown emails lock the same way (block 5).
