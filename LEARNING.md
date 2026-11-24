@@ -915,3 +915,29 @@ The confirmation page now has a **"How to pay"** box (FR-02):
 - *Can a customer really pay with this QR code?* No. It's a clearly marked sample; the real Lynk connection is simulated for now (SRS: external services simulated).
 - *How does the Supervisor know which order a Lynk payment belongs to?* The customer uses the Order ID as the payment reference.
 - *What changes when the client gives the real Lynk ID?* One line in `store-info.ts` (and `LYNK_ID_CONFIRMED = true`); no other code.
+
+## Step 24: The staff live order queue (FR-03)
+`/staff` is now the counter staff's **live queue**: every **active** order (Pending, In progress, Ready for pickup, Being delivered), **oldest first**, so new orders arrive at the **bottom** as **Pending**. Each card shows the **Order ID**, **items** (size, extras, meal notes), **order time**, **Ready by**, **pickup or delivery** (and where) and the **status**. New orders appear **within seconds without refreshing**. Status buttons and "Past Orders" come in Step 26; the server's status rules in Step 28.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0007_staff_order_access.sql` | Data | **New.** RLS: counter staff may **read** all orders, items and extras (still no writing). Adds `orders` to Supabase Realtime. |
+| `supabase/tests/0007_staff_queue_checks.sql` | Data | **New.** 5 checks: staff see all; customers still only their own; other roles see none; staff can't update directly; Realtime is on for orders. |
+| `src/lib/order-status.ts` | Application | **New.** The 7 status names (must match the database), `ACTIVE_STATUSES`, and labels like "Ready for pickup". |
+| `src/lib/orders/get-queue.ts` | Application (server only) | **New.** `getActiveOrders()`: active orders with items, extras and location, oldest first, read through RLS. |
+| `src/components/StaffQueue.tsx` | Presentation (browser) | **New.** The cards, the Realtime subscription, the "● Live" label. |
+| `src/app/staff/page.tsx` | Presentation | Placeholder replaced by the queue; `requireRole(["counter_staff"])` stays. |
+
+### Key concepts
+- **Supabase Realtime:** the database sends a short message to every connected browser when a row in a "published" table changes. We published only `orders`.
+- **Subscribe, then refresh:** on each message the queue calls `router.refresh()`, so the server builds the queue again. The message alone doesn't contain the items; re-reading keeps ONE way of building the queue.
+- **Realtime respects RLS:** each listener only hears about rows they're allowed to read. A customer would only hear about their own orders; staff hear about all.
+- **Policies add up:** a row is visible if ANY policy allows it, so adding a staff policy doesn't change what customers see.
+- **Read-only staff access:** staff can READ orders, but changing a status will only be possible through a server rule (Step 28), so "status only moves forward" can't be skipped from the browser.
+- **Cleanup:** the subscription is closed when the queue is hidden or left, and opened again (with one refresh) when it comes back, so no order is missed.
+
+### Possible lecturer questions
+- *How does a new order reach the staff screen within 3 seconds?* Realtime sends a message when the `orders` row is inserted; the queue re-reads the active orders immediately.
+- *Could a customer use Realtime to spy on other orders?* No. Realtime applies the same RLS rules, so they'd only hear about their own.
+- *Why can't staff just update the status in the database?* The grants only allow SELECT. Status changes go through the server, where the forward-only rule lives.
