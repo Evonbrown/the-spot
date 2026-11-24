@@ -11,6 +11,10 @@
  *       Staff also see the payment status (Unpaid / Paid).
  *       Step 28: "Ready since" while it waits at the counter, and "Mark
  *       Abandoned" once 20 minutes have passed (pickup only, SR-5.5).
+ *       Step 31 (FR-04 SR-4.1, TS-4.1.1 / TS-4.1.2): for DELIVERY orders, a
+ *       "Delivery" box near the top: drop-off location (large), ready-by,
+ *       customer, driver, and "Assign driver" (with each driver's active
+ *       deliveries) until the order leaves.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        getOrderForStaff (Application layer) reads through RLS (Data layer,
@@ -31,6 +35,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import AssignDriver from "@/components/AssignDriver";
 import OrderLiveRefresh from "@/components/OrderLiveRefresh";
 import StatusBadge from "@/components/StatusBadge";
 import StatusButtons from "@/components/StatusButtons";
@@ -38,6 +43,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { formatExtraPrice, formatPrice } from "@/lib/menu-helpers";
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/order-status";
 import { formatJamaicaDateTime, formatJamaicaTime } from "@/lib/order-rules";
+import { canChangeDriver } from "@/lib/orders/delivery-rules";
+import { getDrivers, type DriverOption } from "@/lib/orders/get-drivers";
 import { getOrderForStaff, type StaffOrderDetails } from "@/lib/orders/get-order";
 
 export const metadata: Metadata = {
@@ -93,7 +100,18 @@ async function StaffOrderContent({ params }: { params: Promise<{ id: string }> }
     return <Message title="Order not found" text="Check the order number and try again." />;
   }
 
-  return <OrderDetails order={order} />;
+  // Step 31: the driver list, only when this order can get / change a driver.
+  // If it can't be loaded, the rest of the page still shows (drivers = null).
+  let drivers: DriverOption[] | null = [];
+  if (canChangeDriver(order)) {
+    try {
+      drivers = await getDrivers();
+    } catch {
+      drivers = null;
+    }
+  }
+
+  return <OrderDetails order={order} drivers={drivers} />;
 }
 
 function Message({ title, text }: { title: string; text: string }) {
@@ -105,8 +123,94 @@ function Message({ title, text }: { title: string; text: string }) {
   );
 }
 
+/*
+ * DeliveryBox (Step 31, FR-04 SR-4.1 / TS-4.1.1): for DELIVERY orders, the
+ * things a driver assignment needs, near the top and easy to read:
+ * the drop-off location (large), ready-by time, the customer (tap to call),
+ * the driver (or "No driver yet"), and the "Assign driver" choice while the
+ * order hasn't left yet.
+ */
+function DeliveryBox({
+  order,
+  readyBy,
+  drivers,
+}: {
+  order: StaffOrderDetails;
+  readyBy: string;
+  drivers: DriverOption[] | null;
+}) {
+  const delivery = order.delivery;
+  // Before a driver is assigned, show the order's location; after, the copy
+  // saved with the delivery (they are the same unless a location was renamed).
+  const location = delivery?.dropOffLocation ?? order.deliveryLocation?.name ?? "Location missing";
+
+  return (
+    <section className="mt-4 rounded-xl bg-white p-5 shadow-sm" aria-labelledby="delivery-title">
+      <h2 id="delivery-title" className="text-lg font-bold">
+        Delivery
+      </h2>
+
+      <dl className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <dt className="text-sm text-stone-500">Drop-off location</dt>
+          <dd className="text-2xl font-extrabold">{location}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-stone-500">Ready by</dt>
+          <dd className="font-semibold">{readyBy}</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-stone-500">Customer</dt>
+          <dd className="font-semibold">
+            {order.customer?.name || "Name not given"}
+            {order.customer?.phone && (
+              <>
+                {" · "}
+                <a
+                  href={`tel:${order.customer.phone.replace(/[^\d+]/g, "")}`}
+                  className="text-brand underline"
+                >
+                  {order.customer.phone}
+                </a>
+              </>
+            )}
+          </dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-sm text-stone-500">Driver</dt>
+          <dd className="font-semibold">
+            {delivery ? (
+              <>
+                {delivery.driverName}{" "}
+                <span className="font-normal text-stone-600">
+                  (assigned {formatJamaicaTime(delivery.assignedAt)})
+                </span>
+              </>
+            ) : (
+              <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-amber-900">No driver yet</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+
+      {/* Assign / change: only before it leaves (decision). */}
+      {canChangeDriver(order) && (
+        <div className="mt-4 border-t border-stone-100 pt-4">
+          {drivers === null ? (
+            <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+              We couldn&apos;t load the drivers. Refresh the page to try again.
+            </p>
+          ) : (
+            <AssignDriver orderId={order.id} currentDriverId={delivery?.driverId ?? null} drivers={drivers} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* The details themselves. PHONES: one column. */
-function OrderDetails({ order }: { order: StaffOrderDetails }) {
+function OrderDetails({ order, drivers }: { order: StaffOrderDetails; drivers: DriverOption[] | null }) {
   const isDelivery = order.fulfilment === "DELIVERY";
   const readyBy = order.isAsap
     ? `ASAP (about ${formatJamaicaTime(order.requestedTime)})`
@@ -126,6 +230,9 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
         </div>
       </section>
 
+      {/* ---- Step 31: Delivery (location, driver, Assign driver) ---- */}
+      {isDelivery && <DeliveryBox order={order} readyBy={readyBy} drivers={drivers} />}
+
       {/* ---- Actions (Step 26): the ONE next step + Cancel ---- */}
       <section className="mt-4 rounded-xl bg-white p-5 shadow-sm" aria-labelledby="actions-title">
         <h2 id="actions-title" className="mb-3 text-lg font-bold">
@@ -137,6 +244,7 @@ function OrderDetails({ order }: { order: StaffOrderDetails }) {
           fulfilment={order.fulfilment}
           payment={order.payment}
           readyForPickupAt={order.readyForPickupAt}
+          hasDriver={order.delivery !== null}
         />
       </section>
 

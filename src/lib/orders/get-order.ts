@@ -105,6 +105,16 @@ export type StaffOrderDetails = OrderDetails & {
   // order_status_history, or null. Used for "Ready since 2:15 p.m." and the
   // 20-minute Abandoned rule.
   readyForPickupAt: number | null;
+  // Step 31 (FR-04): the driver, for delivery orders that have one.
+  delivery: StaffDelivery | null;
+};
+
+/* Step 31: who is delivering it (from the deliveries table, migration 0013). */
+export type StaffDelivery = {
+  driverId: string;
+  driverName: string;
+  dropOffLocation: string; // the location name copied when it was assigned
+  assignedAt: number; // milliseconds since 1970
 };
 
 // ---- What comes back FROM the database (snake_case) -------------------------
@@ -147,9 +157,16 @@ type NotificationRow = {
 type CustomerOrderRow = OrderRow & {
   notifications: NotificationRow[] | null;
 };
+type DeliveryRow = {
+  driver_id: string;
+  drop_off_location: string;
+  assigned_at: string;
+  driver: { full_name: string | null } | null;
+};
 type StaffOrderRow = OrderRow & {
   profiles: { full_name: string | null; phone: string | null } | null;
   order_status_history: { status: OrderStatus; changed_at: string }[] | null;
+  deliveries: DeliveryRow | DeliveryRow[] | null; // one-to-one: object or list of one
 };
 
 /*
@@ -271,6 +288,11 @@ export async function getOrderForCustomer(
  * profile (allowed for counter staff by migration 0008).
  * "order_status_history ( status, changed_at )" = every status it has had
  * and when (counter staff may read it from migration 0011, Step 28).
+ * Step 31: "deliveries ( ... )" = the driver (migration 0013).
+ *   "driver:profiles!deliveries_driver_id_fkey" = follow the DRIVER link to
+ *   profiles and call it "driver". The name after "!" is needed because
+ *   deliveries links to profiles TWICE (driver_id and assigned_by), so
+ *   Supabase must be told which link we mean.
  * THROWS if the database can't be reached.
  */
 export async function getOrderForStaff(idText: string): Promise<StaffOrderDetails | null> {
@@ -280,7 +302,11 @@ export async function getOrderForStaff(idText: string): Promise<StaffOrderDetail
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("orders")
-    .select(`${ORDER_COLUMNS}, profiles ( full_name, phone ), order_status_history ( status, changed_at )`)
+    .select(
+      `${ORDER_COLUMNS}, profiles ( full_name, phone ), order_status_history ( status, changed_at ),
+       deliveries ( driver_id, drop_off_location, assigned_at,
+         driver:profiles!deliveries_driver_id_fkey ( full_name ) )`
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -295,5 +321,18 @@ export async function getOrderForStaff(idText: string): Promise<StaffOrderDetail
     ...toOrderDetails(row),
     customer: row.profiles ? { name: row.profiles.full_name, phone: row.profiles.phone } : null,
     readyForPickupAt: findReadyForPickupAt(row.order_status_history),
+    delivery: toStaffDelivery(row.deliveries),
+  };
+}
+
+/* The delivery row (if any) -> our StaffDelivery shape. */
+function toStaffDelivery(value: DeliveryRow | DeliveryRow[] | null): StaffDelivery | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row) return null;
+  return {
+    driverId: row.driver_id,
+    driverName: row.driver?.full_name?.trim() || "Driver (no name)",
+    dropOffLocation: row.drop_off_location,
+    assignedAt: Date.parse(row.assigned_at),
   };
 }

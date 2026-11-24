@@ -10,6 +10,8 @@
  *         - Step 28: for a PICKUP order that is Ready for pickup, a hint
  *           "You can mark it Abandoned from 2:36 p.m.", and from that time a
  *           "Mark Abandoned" button (with "Are you sure?") (SR-5.5);
+ *         - Step 31: for a DELIVERY order with no driver yet, "Assign a driver
+ *           first" instead of "Mark Being delivered";
  *         - nothing but "This order is finished" once it is finished.
  *
  * LAYER: Presentation. The next step comes from nextStatus() (order-status.ts)
@@ -57,9 +59,17 @@ type Props = {
   fulfilment: Fulfilment;
   payment: PaymentForHandover | null; // for the handover form (Step 27)
   readyForPickupAt: number | null; // when it became Ready for pickup (Step 28)
+  hasDriver: boolean; // Step 31: a driver is assigned (delivery orders)
 };
 
-export default function StatusButtons({ orderId, status, fulfilment, payment, readyForPickupAt }: Props) {
+export default function StatusButtons({
+  orderId,
+  status,
+  fulfilment,
+  payment,
+  readyForPickupAt,
+  hasDriver,
+}: Props) {
   const router = useRouter();
   // isPending = true while the server works: buttons show "Saving…" and are
   // disabled, so a double tap can't send two changes.
@@ -125,6 +135,9 @@ export default function StatusButtons({ orderId, status, fulfilment, payment, re
   // Step 27: completing a PICKUP order goes through the handover form.
   const isHandover = next !== null && needsPickupHandover({ fulfilment }, next);
   const collectCash = cashToCollect(payment);
+  // Step 31 (decision): "Mark Being delivered" only once a driver is assigned.
+  // (The server and the database check this too.)
+  const needsDriverFirst = next === "BEING_DELIVERED" && !hasDriver;
 
   /*
    * change(newStatus, handover?): ask the server to make the change.
@@ -177,7 +190,13 @@ export default function StatusButtons({ orderId, status, fulfilment, payment, re
   return (
     <div className="flex flex-col gap-3">
       {/* ---- The ONE next step (or the handover for pickup -> Completed) ---- */}
-      {next && !isHandover && (
+      {needsDriverFirst && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+          Assign a driver first (in the Delivery box above), then you can mark it Being delivered.
+        </p>
+      )}
+
+      {next && !isHandover && !needsDriverFirst && (
         <button
           type="button"
           onClick={() => change(next)}

@@ -4,6 +4,7 @@
  * WHAT: getActiveOrders(): loads every ACTIVE order (Pending, In progress,
  *       Ready for pickup, Being delivered) with its items, extras and
  *       delivery location, OLDEST FIRST, for the counter staff queue (FR-03).
+ *       Step 31: also the driver's name for delivery orders.
  *       getPastOrders() (Step 26): TODAY's finished orders, NEWEST first,
  *       for the "Past Orders" section.
  *
@@ -40,6 +41,8 @@ export type QueueOrder = {
   locationName: string | null; // delivery only, e.g. "UWI Mona"
   requestedTime: number; // "Ready by" (ms since 1970)
   isAsap: boolean;
+  // Step 31: the driver's name for delivery orders, or null = "No driver yet".
+  driverName: string | null;
   items: {
     id: number;
     name: string;
@@ -51,6 +54,7 @@ export type QueueOrder = {
 };
 
 // What comes back FROM the database (snake_case).
+type DeliveryDriver = { driver: { full_name: string | null } | null };
 type QueueRow = {
   id: number;
   created_at: string;
@@ -59,6 +63,8 @@ type QueueRow = {
   requested_time: string;
   is_asap: boolean;
   delivery_locations: { name: string } | null;
+  // Step 31: the driver (one-to-one: an object, a list of one, or nothing).
+  deliveries: DeliveryDriver | DeliveryDriver[] | null;
   order_items: {
     id: number;
     item_name: string;
@@ -84,6 +90,7 @@ export async function getActiveOrders(): Promise<QueueOrder[]> {
     .select(
       `id, created_at, status, fulfilment, requested_time, is_asap,
        delivery_locations ( name ),
+       deliveries ( driver:profiles!deliveries_driver_id_fkey ( full_name ) ),
        order_items ( id, item_name, size, quantity, note,
          order_item_customizations ( id, customization_name ) )`
     )
@@ -107,6 +114,7 @@ export async function getActiveOrders(): Promise<QueueOrder[]> {
     locationName: row.delivery_locations?.name ?? null,
     requestedTime: Date.parse(row.requested_time),
     isAsap: row.is_asap,
+    driverName: driverNameOf(row.deliveries),
     items: [...row.order_items]
       .sort((a, b) => a.id - b.id)
       .map((item) => ({
@@ -120,6 +128,16 @@ export async function getActiveOrders(): Promise<QueueOrder[]> {
           .map((extra) => extra.customization_name),
       })),
   }));
+}
+
+/*
+ * driverNameOf(deliveries) -> the driver's name, or null if no driver yet.
+ * (Step 31: counter staff may read deliveries and driver profiles, 0013.)
+ */
+function driverNameOf(value: DeliveryDriver | DeliveryDriver[] | null): string | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row) return null;
+  return row.driver?.full_name?.trim() || "Driver (no name)";
 }
 
 // ---- Past Orders (Step 26) ----------------------------------------------------

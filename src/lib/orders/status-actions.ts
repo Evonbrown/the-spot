@@ -99,14 +99,14 @@ export async function updateOrderStatus(
 
   // ---- 3. FRESH ORDER + THE RULE ----
   // Read with the staff member's OWN login (RLS: counter staff may read
-  // orders, 0007, and their history, 0011), not the secret key: least
+  // orders, 0007, their history, 0011, and deliveries, 0013), not the secret key: least
   // privilege. The history tells us WHEN it became Ready for pickup, for the
   // 20-minute Abandoned rule (Step 28). It is read fresh here: the time the
   // browser shows is never trusted.
   const supabase = await createClient();
   const { data: order, error: readError } = await supabase
     .from("orders")
-    .select("status, fulfilment, order_status_history ( status, changed_at )")
+    .select("status, fulfilment, order_status_history ( status, changed_at ), deliveries ( id )")
     .eq("id", orderId)
     .maybeSingle();
 
@@ -120,12 +120,16 @@ export async function updateOrderStatus(
     status: OrderStatus;
     fulfilment: Fulfilment;
     order_status_history: { status: OrderStatus; changed_at: string }[] | null;
+    // Step 31: its delivery row, if a driver is assigned (one object, or a
+    // list of one, or nothing).
+    deliveries: { id: number } | { id: number }[] | null;
   };
   const current: OrderForStatusCheck = {
     id: orderId,
     status: row.status,
     fulfilment: row.fulfilment,
     readyForPickupAt: findReadyForPickupAt(row.order_status_history),
+    hasDriver: Array.isArray(row.deliveries) ? row.deliveries.length > 0 : row.deliveries !== null,
   };
   if (current.status !== rawSeenStatus) return { ok: false, error: SOMEONE_ELSE };
 

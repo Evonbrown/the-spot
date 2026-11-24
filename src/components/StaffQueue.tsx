@@ -19,6 +19,7 @@
  *
  * Step 26: a "Past Orders" section under the queue (today's finished orders).
  * Status buttons are on each order's details page.
+ * Step 31: delivery cards show the driver, or "No driver yet".
  */
 
 import Link from "next/link";
@@ -159,6 +160,20 @@ function OrderCard({ order }: { order: QueueOrder }) {
           </dd>
         </div>
       </dl>
+
+      {/* Step 31 (decision): delivery cards show the driver, or "No driver
+          yet" in amber, so staff see at a glance what still needs a driver. */}
+      {order.fulfilment === "DELIVERY" &&
+        (order.driverName ? (
+          <p className="mt-1 text-sm">
+            <span className="text-stone-500">Driver</span>{" "}
+            <span className="font-semibold">{order.driverName}</span>
+          </p>
+        ) : (
+          <p className="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-900">
+            No driver yet
+          </p>
+        ))}
 
       {/* Items, with extras and meal notes (the kitchen needs the notes). */}
       <ul className="mt-3 flex flex-col gap-2 border-t border-stone-100 pt-3">

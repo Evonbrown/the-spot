@@ -1149,3 +1149,39 @@ When an order's status changes to **Ready for pickup**, **Cancelled** or **Aband
 - *Why is it in the database, not the server action?* Every way of changing a status (staff buttons now, the driver screen later) goes through the orders table, so the trigger can't be forgotten.
 - *Can a customer see another customer's messages?* No: RLS only returns rows where customer_id is the logged-in user (tested in block 6).
 - *Why no message for In progress?* SR-5.4 only asks for Ready, Cancelled and Abandoned; the trigger's WHEN condition only fires for those.
+
+## Step 31: Assign delivery orders to a driver (FR-04 SR-4.1 / AC-1, TS-4.1.1 / TS-4.1.2)
+On the counter staff order details page, **delivery** orders now have a **Delivery** box near the top: the **drop-off location** in large text, ready-by time, the customer (tap to call), the **driver** (or "No driver yet"), and an **"Assign driver"** list showing each driver's **active deliveries**, e.g. "Jane Brown (2 active)", fewest first. Staff can **change the driver** until the order leaves. **"Mark Being delivered"** is replaced by "Assign a driver first" until a driver is set. Queue cards show "Driver: Jane" or an amber "No driver yet".
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0013_deliveries.sql` | Data | **New.** `deliveries` table (one per order: driver, drop-off location copy, assigned_at/by, picked_up_at + delivered_at for Step 33, time rules); RLS (counter staff read deliveries + delivery staff profiles); `assign_delivery()` (server only); trigger "Being delivered needs a driver". |
+| `supabase/tests/0013_deliveries_checks.sql` | Data | **New.** 12 checks: assign, change, pickup refused, non-driver refused, locked after it leaves, finished refused, no-driver Being delivered refused, "someone else changed it", active count, time rule, who can read, nobody can write. |
+| `src/lib/orders/delivery-rules.ts` | Application | **New.** `canChangeDriver()`, `checkDriverAssignment()` (a message per mistake). |
+| `src/lib/orders/delivery-actions.ts` | Application | **New.** `assignDriver()` Server Action: counter staff only → shape → fresh reads → rule → `assign_delivery()`. |
+| `src/lib/orders/get-drivers.ts` | Application (server only) | **New.** Drivers + their active delivery count, fewest first. |
+| `src/components/AssignDriver.tsx` | Presentation (browser) | **New.** The list, Assign / Change driver, "Saving…", messages. |
+| `src/lib/orders/get-order.ts`, `get-queue.ts` | Application | Also load the driver. |
+| `src/lib/orders/status-rules.ts`, `status-actions.ts` | Application | Being delivered needs a driver (`hasDriver`). |
+| `src/components/StatusButtons.tsx`, `StaffQueue.tsx`, `src/app/staff/orders/[id]/page.tsx` | Presentation | "Assign a driver first"; driver on queue cards; the Delivery box. |
+
+### Key concepts
+- **One row per delivery, updated on change (decision: latest only):** `order_id` is UNIQUE, and `insert ... on conflict (order_id) do update` either adds the row or changes the driver in it.
+- **Copy the location name:** `drop_off_location` keeps the name at assignment time, like order items keep their price.
+- **Row lock (`for update`):** while one staff member assigns a driver, the order row is locked, so a second staff member at the same moment waits, then sees the first driver and gets "someone else just changed the driver".
+- **"Available" without a new switch:** the list counts each driver's deliveries whose order isn't finished. The busiest drivers sink to the bottom.
+- **Two links to the same table:** `deliveries` links to `profiles` twice (driver and assigned_by), so the query says which one: `driver:profiles!deliveries_driver_id_fkey ( full_name )`.
+- **Live without a new Realtime table:** `assign_delivery()` "touches" the order (updated_at), and every open screen already listens to orders.
+- **Rules in three layers again:** page (hint) → server action (friendly message) → database function + trigger (final lock).
+
+### Possible lecturer questions
+- *How do staff know which driver is available?* Each driver shows how many unfinished deliveries they have; fewest first.
+- *Can an order go out without a driver?* No: the button is replaced, the server refuses, and the database trigger refuses BEING_DELIVERED without a deliveries row.
+- *Can staff change the driver after the food has left?* No: only before Being delivered (server rule + database function).
+- *Why can't staff just edit the deliveries table?* Only SELECT is granted; every change goes through the server action and `assign_delivery()`, which only the server can run.
+
+## Known issues (to fix before the demo)
+- **Customer order page doesn't update live (since migration 0013).** When staff change an order's status, the customer's `/orders/[id]` page no longer changes by itself; after a manual refresh the data IS correct (status, progress line, messages). It worked in Steps 29-30.
+  - Already checked (Step 31): the order data and the "has a driver" logic are correct; Supabase Realtime itself connects (test subscription in ~0.5 s); the Supabase status page showed no Realtime incident; the production build passes; Step 31 did not change the customer page or `OrderLiveRefresh`, and 0013 did not change the `orders` policies or the Realtime publication.
+  - Next things to look at: what the live label on the customer page says ("● Live" / "Connecting…" / "Reconnecting…"), errors in the browser console, and whether Realtime still delivers `orders` changes to a CUSTOMER login (RLS check per listener) after 0013.

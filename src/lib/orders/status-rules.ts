@@ -46,6 +46,9 @@ export type OrderForStatusCheck = {
   // When it became READY_FOR_PICKUP (milliseconds since 1970), from
   // order_status_history. null = not ready yet (or no history row).
   readyForPickupAt: number | null;
+  // Step 31: does it have a driver (a row in deliveries)? Delivery orders
+  // can't become Being delivered without one.
+  hasDriver: boolean;
 };
 
 const MINUTE = 60_000; // one minute in milliseconds
@@ -60,7 +63,8 @@ const MINUTE = 60_000; // one minute in milliseconds
  *   3. CANCELLED is allowed from any status that isn't finished;
  *   4. ABANDONED has its own rule (checkAbandon, below);
  *   5. everything else must be exactly ONE step forward on the order's path:
- *      not a status from the other path, not backwards, not a skip.
+ *      not a status from the other path, not backwards, not a skip;
+ *   6. Step 31: Being delivered needs a driver.
  */
 export function checkStatusChange(
   order: OrderForStatusCheck,
@@ -111,6 +115,12 @@ export function checkStatusChange(
   if (toPosition > fromPosition + 1) {
     const next = STATUS_LABELS[steps[fromPosition + 1]];
     return `You can't skip steps. The next step for order #${order.id} is ${next}.`;
+  }
+
+  // Step 31 (FR-04): nothing goes "on the road" with nobody responsible for
+  // it. (The database trigger in migration 0013 checks this too.)
+  if (newStatus === "BEING_DELIVERED" && !order.hasDriver) {
+    return `Assign a driver to order #${order.id} before it goes out for delivery.`;
   }
 
   return null; // exactly one step forward: allowed
