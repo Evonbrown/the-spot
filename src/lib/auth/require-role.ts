@@ -19,7 +19,7 @@
  */
 
 import { redirect } from "next/navigation";
-import { getCurrentProfile, type Profile } from "@/lib/auth/get-profile";
+import { getLoginState, type Profile } from "@/lib/auth/get-profile";
 import type { UserRole } from "@/lib/auth/roles";
 
 /*
@@ -31,7 +31,12 @@ export async function requireRole(
   allowedRoles: UserRole[],
   options: { returnTo?: string } = {}
 ): Promise<Profile> {
-  const profile = await getCurrentProfile();
+  const { profile, idle } = await getLoginState();
+
+  // Step 39c (SRS Section 3): a STAFF member idle for over 30 minutes is
+  // logged out. /logout clears their login cookies (a page can't), then shows
+  // the login page with "You were logged out after 30 minutes without activity."
+  if (idle) redirect("/logout?reason=idle");
 
   // Authentication: WHO are you? Not logged in -> go and log in.
   if (!profile) {

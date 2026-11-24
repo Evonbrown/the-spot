@@ -16,8 +16,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import CartLink from "@/components/CartLink";
 import LogOutButton from "@/components/LogOutButton";
+import StaffIdleWatcher from "@/components/StaffIdleWatcher";
 import { getCurrentProfile } from "@/lib/auth/get-profile";
+import { isStaffRole } from "@/lib/auth/idle-rules";
 import { ROLE_HOME, ROLE_LABELS, ROLE_SCREEN_LINK } from "@/lib/auth/roles";
+import { idleTimes } from "@/lib/auth/security-settings";
 
 // px-2 (not px-3) keeps everything on one line on small phones; min-h-11 meets mobile tap-target size.
 const linkClass = "inline-flex min-h-11 shrink-0 items-center rounded-md px-2 py-2 hover:bg-brand-dark";
@@ -116,12 +119,21 @@ async function AccountArea() {
       <Link
         href="/account"
         title="My account"
-        className="max-w-[6.5rem] rounded-md px-1 text-right leading-tight hover:bg-white/10"
+        className="inline-flex min-h-11 max-w-[6.5rem] flex-col justify-center rounded-md px-1 text-right leading-tight hover:bg-white/10"
       >
         <span className="block truncate underline-offset-2 hover:underline">{profile.full_name || profile.email}</span>
         <span className="block truncate text-xs font-normal opacity-90">{ROLE_LABELS[profile.role]}</span>
       </Link>
       <LogOutButton className={linkClass} />
+      {/* Step 39c (SRS Section 3): STAFF are logged out after 30 minutes
+          without activity, with a warning at 28. Customers aren't affected. */}
+      {isStaffRole(profile.role) && <StaffIdleWatcher {...idleTimesForBrowser()} />}
     </>
   );
+}
+
+/* The browser only needs these two times (not the server's own limit). */
+function idleTimesForBrowser(): { idleMs: number; warnMs: number } {
+  const { idleMs, warnMs } = idleTimes();
+  return { idleMs, warnMs };
 }

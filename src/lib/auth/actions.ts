@@ -297,6 +297,12 @@ export async function logIn(
   // Step 39b: a good login forgets the earlier failures.
   await recordSuccess(data.user.id);
 
+  // Step 39c: logging in counts as activity. Without this, a staff member
+  // whose last activity was yesterday would count as "idle" the moment they
+  // log in. (The database ignores customers: they aren't tracked.)
+  const { error: touchError } = await createAdminClient().rpc("touch_staff_activity", { p_user_id: data.user.id });
+  if (touchError) console.error("logIn: touch_staff_activity failed:", touchError.message);
+
   // Send each role to its own screen (e.g. counter_staff -> /staff).
   // We read the role from the database (RLS lets a user read their own profile),
   // never from anything the browser sent.

@@ -1554,3 +1554,38 @@ The rules (server action AND database): **only the Supervisor**; only a **paid**
 - *What stops an attacker from just clearing cookies to reset the counter?* The count is in the database, per account, not in the browser.
 - *What if they skip our login page and call Supabase directly?* After the 5th failure the account is banned inside Supabase Auth itself; before that, Supabase's per-IP rate limit applies.
 - *Does a lock reveal that an email has an account?* No: unknown emails lock the same way (block 5).
+
+## Step 39c: Staff logged out after 30 minutes idle (SRS Section 3, Security)
+- **Who:** counter staff, drivers, the Manager and the Supervisor. **Customers are not affected.**
+- **Activity = a real person:** a tap/click, a key, scrolling. NOT the automatic refreshes (staff screens refresh themselves every 30 seconds, which must not keep a forgotten screen logged in).
+- **At 28 minutes:** a box "Are you still there? For your security, you'll be logged out in 1:59 ... **Stay logged in** / Log out now".
+- **At 30 minutes:** logged out; the login page says "You were logged out after 30 minutes without activity, to keep your account safe."
+- **Several tabs:** activity in one tab keeps the others alive (shared through the browser's localStorage).
+- **Quick testing:** `TEST_SHORT_SECURITY_TIMERS=true` -> logged out after 2 minutes, warning after 1. Or in the SQL Editor set a staff member's `last_active_at` to 33 minutes ago (see the top of the test file): their screen logs out at its next refresh.
+
+### Two layers (why a browser timer alone isn't enough)
+1. **Browser (StaffIdleWatcher):** watches activity, shows the warning, logs out at 30 minutes, and tells the server "still here" at most once a minute.
+2. **Server (get-profile.ts):** on EVERY page and Server Action it reads `profiles.last_active_at`. A staff member idle for more than 30 minutes **+ 2 minutes grace** counts as logged out: pages go to `/logout?reason=idle` (which clears the cookies), actions answer "Please log in again." So switching the browser timer off, or a laptop asleep, doesn't keep anyone logged in. The grace exists because the server hears about activity at most once a minute, so it must never log out before the screen's own warning ends.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0025_staff_idle.sql` (+ tests) | Data | **New.** `profiles.last_active_at` (users can't edit it); `touch_staff_activity()` (server only, staff only). |
+| `src/lib/auth/idle-rules.ts` | Application | **New.** `STAFF_ROLES`, `isStaffRole`, `isStaffIdle` (server rule), `idleStage` (browser timer). |
+| `src/lib/auth/security-settings.ts` | Application | `idleTimes()`: 30 min / warn 2 min / server limit 32 min (test: 2 / 1 / 3). |
+| `src/lib/auth/get-profile.ts`, `require-role.ts` | Application | `getLoginState()` (profile + idle); idle staff = logged out; requireRole sends them to `/logout?reason=idle`. |
+| `src/app/logout/route.ts` | Application | **New.** Clears the login cookies, then the login page (a page can't change cookies; a route handler can). |
+| `src/lib/auth/activity-actions.ts` | Application | **New.** `stillHere()` Server Action. |
+| `src/lib/auth/actions.ts` | Application | Logging in counts as activity (otherwise yesterday's time would mean "idle" at once). |
+| `src/components/StaffIdleWatcher.tsx`, `SiteHeader.tsx`, `src/app/login/page.tsx` | Presentation | The timer + warning (staff only), the "logged out" note. |
+
+### Key concepts
+- **Session timeout:** an unattended staff phone at the counter could be used by anyone; logging out after 30 idle minutes limits that.
+- **Don't trust the browser alone:** the browser timer is for a friendly warning; the server check is the real rule.
+- **Column grants:** staff can't set their own `last_active_at` to stay "active" forever (block 2).
+- **Throttling:** at most one "still here" per minute keeps database writes low.
+
+### Possible lecturer questions
+- *What if staff close the laptop and open it 40 minutes later?* The screen's timer sees 40 minutes and logs out; even before it runs, the server sees the old `last_active_at` and refuses every page and action.
+- *Why don't the automatic refreshes count as activity?* Then an abandoned screen would never log out.
+- *Are customers logged out too?* No (decision): only staff roles.

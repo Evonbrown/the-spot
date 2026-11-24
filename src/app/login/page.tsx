@@ -20,13 +20,18 @@ import { isShortSecurityTimersOn } from "@/lib/test-settings";
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; reason?: string | string[] }>;
 }) {
   return (
     <main className="mx-auto w-full max-w-sm px-4 py-10">
       {/* Reads the login cookie, so it must sit inside <Suspense> */}
       <Suspense fallback={null}>
         <RedirectIfLoggedIn searchParams={searchParams} />
+      </Suspense>
+      {/* Step 39c: "?reason=idle" (sent by /logout) -> say why. Reading the
+          address must also sit inside <Suspense>. */}
+      <Suspense fallback={null}>
+        <IdleNotice searchParams={searchParams} />
       </Suspense>
       <h1 className="text-3xl font-extrabold">Log in</h1>
       <p className="mt-1 mb-6 text-sm text-stone-600">
@@ -35,8 +40,8 @@ export default function LoginPage({
       {/* Step 39b: only on a laptop with TEST_SHORT_SECURITY_TIMERS=true (never live). */}
       {isShortSecurityTimersOn() && (
         <p className="mb-4 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
-          TEST MODE: short security timers (a login lock lasts 1 minute instead of 15). This only works with npm
-          run dev on your own computer.
+          TEST MODE: short security timers (a login lock lasts 1 minute instead of 15; staff are logged out
+          after 2 minutes idle instead of 30). This only works with npm run dev on your own computer.
         </p>
       )}
       {/* The form reads ?next=... (e.g. /checkout) with useSearchParams, which
@@ -46,6 +51,21 @@ export default function LoginPage({
         <LoginForm />
       </Suspense>
     </main>
+  );
+}
+
+/*
+ * IdleNotice (Step 39c): shown after a staff member was logged out for being
+ * idle. Only the exact value "idle" counts, so the address can't be used to
+ * show any other text.
+ */
+async function IdleNotice({ searchParams }: { searchParams: Promise<{ reason?: string | string[] }> }) {
+  const { reason } = await searchParams;
+  if (reason !== "idle") return null;
+  return (
+    <p role="status" className="mb-4 rounded-lg bg-sky-50 p-3 text-sm text-sky-950">
+      You were logged out after 30 minutes without activity, to keep your account safe. Please log in again.
+    </p>
   );
 }
 
