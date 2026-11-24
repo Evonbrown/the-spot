@@ -29,6 +29,7 @@ import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { STATUS_LABELS, type OrderStatus, type PaymentMethod, type PaymentStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
 import { checkDriverAssignment, checkDriverStatusChange } from "@/lib/orders/delivery-rules";
+import { DAY_CLOSED_MESSAGE, isDayClosedError } from "@/lib/reports/closeout-rules";
 import {
   cashToCollect,
   checkHandover,
@@ -138,6 +139,8 @@ export async function assignDriver(
 
   if (saveError) {
     console.error("assignDriver: assign_delivery failed:", saveError.message);
+    // Step 36: the day is closed (locked): say so, don't just "try again".
+    if (isDayClosedError(saveError.message)) return { ok: false, error: DAY_CLOSED_MESSAGE };
     return { ok: false, error: "We couldn't save the driver. Please try again." };
   }
   if (saved !== true) return { ok: false, error: SOMEONE_ELSE };
@@ -266,6 +269,8 @@ export async function updateDeliveryStatus(
 
   if (saveError) {
     console.error("updateDeliveryStatus: driver_change_delivery_status failed:", saveError.message);
+    // Step 36: the day is closed (locked): say so, don't just "try again".
+    if (isDayClosedError(saveError.message)) return { ok: false, error: DAY_CLOSED_MESSAGE };
     return { ok: false, error: "We couldn't save that. Please try again." };
   }
   if (changed !== true) return { ok: false, error: STATUS_CHANGED };

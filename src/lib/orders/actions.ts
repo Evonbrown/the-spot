@@ -405,6 +405,11 @@ export async function placeOrder(rawInput: unknown): Promise<PlaceOrderResult> {
     p_items: orderItems,
   });
 
+  // Step 36: today has already been closed out (the database refuses new
+  // orders for a locked day): say so plainly.
+  if (error?.message === "The Spot has closed for today. Please order tomorrow.") {
+    return { ok: false, error: error.message };
+  }
   if (error || typeof orderId !== "number") {
     console.error("placeOrder: create_order failed:", error?.message ?? orderId);
     return { ok: false, error: "We couldn't place your order, so nothing was ordered. Please try again." };

@@ -1345,3 +1345,42 @@ The first version of `sales_range_summary()` (0017) did two "squeezes" in ONE st
 - *How do you make sure the item report and the sales summary agree?* Both use the same database rule for which orders count, and the page checks item revenue = gross sales − delivery fees.
 - *Why limit ranges to 31 days?* It covers a monthly report and meets the SRS speed target (10 s for 31 days); longer exports can come later.
 - *Can counter staff see the item report?* No: the database functions are Manager only, and counter staff's page has no ranges or item report.
+
+## Step 36: Daily closeout (FR-06 SR-6.6 / SR-6.7 / SR-6.8 / SR-6.10)
+A **Daily closeout** box on `/manager` (when ONE day is chosen) and on `/staff/sales` (today):
+1. **Count the cash** (counter staff: today only; Manager: any day up to today): type the cash in the till; the box shows **expected cash** (paid cash orders), the **difference** (live), and asks for an **explanation** when the difference is more than the limit (J$500 by default, over OR short).
+2. **Approve and lock** (Manager only): the day's figures are saved and the day is **locked**.
+3. **Reopen** (Manager only, with a written reason): unlock; then count and approve again.
+
+**Open orders** (Pending, In progress, Ready, Being delivered) block counter staff; the Manager can close anyway only with an **override reason**, and those orders are then frozen until a reopen. A range on `/manager` shows a **Closed** column (✓ / –).
+
+### What "locked" means (enforced by the DATABASE)
+For an order **placed on a locked day**: the order (status included), its payment and its delivery can't change; and **no new order** can be placed on a locked day ("The Spot has closed for today. Please order tomorrow.").
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0019_daily_closeout.sql` | Data | **New.** `store_settings` (cash difference limit), `daily_closeouts` (SDS DailyCloseout, `is_locked`), `daily_closeout_events` (history with reasons), lock triggers on orders / payments / deliveries, `submit_closeout_count`, `approve_closeout`, `reopen_closeout`, `set_cash_difference_limit` (server only), `closeout_details` (read, role-checked). |
+| `supabase/tests/0019_closeout_checks.sql` | Data | **New.** 12 checks: open order blocks counter staff, within / over the limit, counter staff past day / approve refused, approve + lock, the lock holds, figures changed, override, reopen, who sees, no direct writes, details. |
+| `src/lib/reports/closeout-rules.ts` | Application | **New.** `parseCashAmount()`, `needsExplanation()`, `cashDifference()` (in cents). |
+| `src/lib/reports/closeout-actions.ts` | Application | **New.** The four Server Actions (role check, values, then the database with the secret key; our own database messages shown as they are). |
+| `src/lib/reports/get-closeout.ts` | Application (server only) | **New.** `getCloseout(day)`, `getClosedDays(start, end)`. |
+| `src/components/CloseoutPanel.tsx` | Presentation (browser) | **New.** Status, open orders, count form, approve, reopen, history, limit. |
+| `src/app/manager/page.tsx`, `src/app/staff/sales/page.tsx`, `src/components/DailyTotals.tsx` | Presentation | The box; the Closed column. |
+| `src/lib/orders/actions.ts` | Application | `placeOrder` shows "closed for today" plainly. |
+
+### Key concepts
+- **A lock enforced by triggers:** the database itself refuses any change to a locked day's orders, payments and deliveries, whoever tries (server, driver, SQL Editor). The app can't forget it.
+- **Re-check at approval:** expected cash is worked out AGAIN when approving; if it changed since the count (a late cash order), approval is refused, so the saved difference is always true.
+- **Snapshot:** at approval the day's figures are saved (`summary`), so the closed day's record never changes.
+- **History, not overwrite:** every count, approval and reopen (with its reason) is a NEW row in `daily_closeout_events`; nothing is lost when a day is reopened twice.
+- **One-row settings table:** `store_settings` has exactly one row (`id` can only be `true`); the Manager changes the limit without a code change (maintainability).
+- **Error codes:** our own `raise exception` messages arrive with code `P0001`, so the app can show them as they are, and hide anything unexpected behind "try again".
+- **Money in cents:** counted − expected is worked out in whole cents, so J$0.30 − J$0.10 is exactly J$0.20.
+- **A clear "closed" message everywhere:** when the lock refuses a change, the staff status buttons (incl. the pickup handover and cash received), the driver's buttons and "Assign driver" all show "This day is closed. The Manager must reopen it before orders can change." (`isDayClosedError()` in `closeout-rules.ts` recognises the lock's message) instead of a general "try again".
+
+### Possible lecturer questions
+- *Can staff change an order after the day is closed?* No: the lock trigger refuses it (tested in block 6). The Manager must reopen the day, with a reason that's recorded.
+- *What if the till is J$700 short?* Over the J$500 limit, so the count needs a written explanation (block 3), saved with the closeout.
+- *What if an order is still open at closing time?* Counter staff can't close out; the Manager can, only with an override reason, and the open order is frozen until a reopen.
+- *Who can approve?* Only the Manager (block 4); counter staff can only count today's cash.

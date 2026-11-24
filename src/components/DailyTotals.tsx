@@ -27,7 +27,11 @@ function shortDay(day: string): string {
   }).format(new Date(`${day}T00:00:00Z`));
 }
 
-export default function DailyTotals({ range }: { range: SalesRange }) {
+/*
+ * closedDays (Step 36): the days in the range that are CLOSED (locked by a
+ * daily closeout), shown as a "Closed" column (✓ or –).
+ */
+export default function DailyTotals({ range, closedDays = [] }: { range: SalesRange; closedDays?: string[] }) {
   const total = range.total;
   const cash = total.byMethod.find((line) => line.method === "CASH")?.net ?? 0;
   const lynk = total.byMethod.find((line) => line.method === "LYNK")?.net ?? 0;
@@ -42,7 +46,7 @@ export default function DailyTotals({ range }: { range: SalesRange }) {
       </h2>
       {/* overflow-x-auto: on a narrow phone the table scrolls inside its box. */}
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[36rem] text-left text-sm">
+        <table className="w-full min-w-[40rem] text-left text-sm">
           <thead className="border-b border-stone-200 text-stone-500">
             <tr>
               <th scope="col" className="py-2 pr-3 font-semibold">
@@ -63,8 +67,11 @@ export default function DailyTotals({ range }: { range: SalesRange }) {
               <th scope="col" className={`${num} font-semibold`}>
                 Cash
               </th>
-              <th scope="col" className="py-2 text-right font-semibold">
+              <th scope="col" className={`${num} font-semibold`}>
                 Lynk
+              </th>
+              <th scope="col" className="py-2 text-center font-semibold">
+                Closed
               </th>
             </tr>
           </thead>
@@ -79,7 +86,14 @@ export default function DailyTotals({ range }: { range: SalesRange }) {
                 <td className={num}>{formatPrice(day.refunds)}</td>
                 <td className={`${num} font-semibold`}>{formatPrice(day.netSales)}</td>
                 <td className={num}>{formatPrice(day.cash)}</td>
-                <td className="py-2 text-right">{formatPrice(day.lynk)}</td>
+                <td className={num}>{formatPrice(day.lynk)}</td>
+                <td className="py-2 text-center">
+                  {closedDays.includes(day.day) ? (
+                    <span aria-label="closed" className="font-bold text-green-700">✓</span>
+                  ) : (
+                    <span aria-label="not closed" className="text-stone-400">–</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -93,7 +107,10 @@ export default function DailyTotals({ range }: { range: SalesRange }) {
               <td className={num}>{formatPrice(total.refunds)}</td>
               <td className={num}>{formatPrice(total.netSales)}</td>
               <td className={num}>{formatPrice(cash)}</td>
-              <td className="py-2 text-right">{formatPrice(lynk)}</td>
+              <td className={num}>{formatPrice(lynk)}</td>
+              <td className="py-2 text-center text-sm font-semibold">
+                {closedDays.length}/{range.days.length}
+              </td>
             </tr>
           </tfoot>
         </table>

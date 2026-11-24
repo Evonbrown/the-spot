@@ -33,6 +33,7 @@ import { getCurrentProfile } from "@/lib/auth/get-profile";
 import { STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import type { Fulfilment } from "@/lib/order-rules";
 import { counterDeliveryProblem } from "@/lib/orders/delivery-rules";
+import { DAY_CLOSED_MESSAGE, isDayClosedError } from "@/lib/reports/closeout-rules";
 import {
   cashToCollect,
   checkHandover,
@@ -188,6 +189,8 @@ export async function updateOrderStatus(
   // database has the final say, and staff can simply try again.
   if (saveError) {
     console.error("updateOrderStatus: change_order_status failed:", saveError.message);
+    // Step 36: the day is closed (locked): say so, don't just "try again".
+    if (isDayClosedError(saveError.message)) return { ok: false, error: DAY_CLOSED_MESSAGE };
     return { ok: false, error: "We couldn't save the change. Please try again." };
   }
   if (changed !== true) return { ok: false, error: SOMEONE_ELSE };

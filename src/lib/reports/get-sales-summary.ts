@@ -253,6 +253,9 @@ export function safeMessage(message: string, fallback: string): string {
     "The end day must be on or after the start day.",
     "Choose at most 31 days.",
     "The range can't include future days.",
+    // Step 36 (closeout_details, 0019):
+    "Counter staff can only see today's closeout.",
+    "You are not allowed to see closeouts.",
   ];
   return ours.includes(message) ? message : fallback;
 }

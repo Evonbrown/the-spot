@@ -10,7 +10,9 @@
  *           with category, order type and sort filters.
  *       Default: today (Jamaica time). The choice is in the address, so it
  *       can be bookmarked and Back works. The old "?date=" (Step 34) still
- *       works. Closeout is Step 36, export / print Step 37.
+ *       works. Export / print is Step 37.
+ *       - Step 36: for ONE day, the "Daily closeout" box (count, approve and
+ *         lock, reopen, history, limit); for a range, a "Closed" column.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        the reports are worked out by the database (Data layer, 0016/0017),
@@ -27,12 +29,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import CloseoutPanel from "@/components/CloseoutPanel";
 import DailyTotals from "@/components/DailyTotals";
 import ItemVolumeReport from "@/components/ItemVolumeReport";
 import SalesSummary from "@/components/SalesSummary";
 import { requireRole } from "@/lib/auth/require-role";
 import { getMenuItems } from "@/lib/menu";
 import { getCategories } from "@/lib/menu-helpers";
+import { getCloseout, getClosedDays } from "@/lib/reports/get-closeout";
 import { getItemVolume, readItemFilters, type ItemFilters } from "@/lib/reports/get-item-volume";
 import {
   getSalesRange,
@@ -111,13 +115,16 @@ async function ManagerScreen({ searchParams }: { searchParams: SearchParams }) {
   );
 
   // Only load reports when the dates are valid.
-  const [summaryResult, rangeResult, itemsResult] =
+  // Step 36: one day -> its closeout box; a range -> which days are closed.
+  const [summaryResult, rangeResult, itemsResult, closeoutResult, closedDays] =
     "error" in parsed
-      ? [null, null, null]
+      ? [null, null, null, null, []]
       : await Promise.all([
           isRange ? null : getSalesSummary(start),
           isRange ? getSalesRange(start, end) : null,
           getItemVolume(start, end, filters),
+          isRange ? null : getCloseout(start),
+          isRange ? getClosedDays(start, end) : Promise.resolve([] as string[]),
         ]);
 
   // The figures for the period (one day, or the range's combined total).
@@ -155,13 +162,24 @@ async function ManagerScreen({ searchParams }: { searchParams: SearchParams }) {
               </p>
             )}
             {/* Range: a line per day first, then the combined summary. */}
-            {rangeResult && "range" in rangeResult && <DailyTotals range={rangeResult.range} />}
+            {rangeResult && "range" in rangeResult && (
+              <DailyTotals range={rangeResult.range} closedDays={closedDays} />
+            )}
             {periodSummary && (
               <>
                 {isRange && <h2 className="text-xl font-bold">Whole range</h2>}
                 <SalesSummary summary={periodSummary} />
               </>
             )}
+            {/* Step 36: the closeout for this ONE day (status shown on the report). */}
+            {closeoutResult &&
+              ("details" in closeoutResult ? (
+                <CloseoutPanel details={closeoutResult.details} isManager />
+              ) : (
+                <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+                  {closeoutResult.error}
+                </p>
+              ))}
             {itemsResult && (
               <ItemVolumeReport
                 start={start}

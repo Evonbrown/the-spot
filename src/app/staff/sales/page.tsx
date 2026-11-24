@@ -4,6 +4,8 @@
  * WHAT: TODAY's sales for counter staff (Step 34, FR-06 SR-6.10: "Counter
  *       staff may only see the current day's sales"). The same summary as the
  *       Manager's, but with no date picker. Linked from the queue (/staff).
+ *       Step 36: today's "Daily closeout" box: counter staff count the cash
+ *       (only when no order is open); the Manager approves on /manager.
  *
  * LAYER: Presentation. requireRole (Application layer) does the access check;
  *        the database function daily_sales_summary (0016) ALSO refuses any
@@ -15,8 +17,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import CloseoutPanel from "@/components/CloseoutPanel";
 import SalesSummary from "@/components/SalesSummary";
 import { requireRole } from "@/lib/auth/require-role";
+import { getCloseout } from "@/lib/reports/get-closeout";
 import { getSalesSummary, jamaicaToday } from "@/lib/reports/get-sales-summary";
 
 export const metadata: Metadata = {
@@ -50,7 +54,8 @@ export default function StaffSalesPage() {
 async function StaffSales() {
   await requireRole(["counter_staff"], { returnTo: "/staff/sales" });
   const today = await jamaicaToday();
-  const result = await getSalesSummary(today);
+  // Step 36: today's closeout too (counter staff can count the cash).
+  const [result, closeout] = await Promise.all([getSalesSummary(today), getCloseout(today)]);
 
   return (
     <>
@@ -63,6 +68,15 @@ async function StaffSales() {
           </p>
         ) : (
           <SalesSummary summary={result.summary} />
+        )}
+      </div>
+      <div className="mt-4">
+        {"details" in closeout ? (
+          <CloseoutPanel details={closeout.details} isManager={false} />
+        ) : (
+          <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+            {closeout.error}
+          </p>
         )}
       </div>
     </>
