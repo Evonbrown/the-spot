@@ -101,14 +101,16 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
 // ---- Payments (SDS class Payment) ----------------------------------------------
 
 /*
- * Names MUST match the database (payments.method / payments.status, 0006 + 0010).
+ * Names MUST match the database (payments.method / payments.status, 0006,
+ * 0010, 0021).
  *   method: LYNK or CASH (never card details: Security).
- *   status: UNPAID -> PAID. Cash is marked PAID at the counter handover
- *           (Step 27) or by the driver (Build step 6); Lynk when the Supervisor
- *           verifies it (Build step 7). REFUNDED comes in Build step 7.
+ *   status: UNPAID -> PAID -> REFUNDED. Cash is marked PAID at the counter
+ *           handover (Step 27) or by the driver (Step 33); Lynk when the
+ *           Supervisor verifies it (Step 38a). REFUNDED = the Supervisor
+ *           refunded ALL of it (Step 38b); a partly refunded payment stays PAID.
  */
 export type PaymentMethod = "LYNK" | "CASH";
-export type PaymentStatus = "UNPAID" | "PAID";
+export type PaymentStatus = "UNPAID" | "PAID" | "REFUNDED";
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   LYNK: "Lynk",
@@ -118,4 +120,5 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   UNPAID: "Unpaid",
   PAID: "Paid",
+  REFUNDED: "Refunded",
 };

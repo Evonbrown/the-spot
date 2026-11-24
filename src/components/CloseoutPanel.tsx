@@ -196,7 +196,9 @@ export default function CloseoutPanel({ details, isManager }: Props) {
           className="mt-4 flex flex-col gap-3 border-t border-stone-100 pt-4"
         >
           <p className="text-sm">
-            Expected cash (paid cash orders): <span className="font-bold">{formatPrice(details.expectedCash)}</span>
+            {/* Step 38b: the day's cash refunds come out of the till. */}
+            Expected cash (paid cash orders − cash refunds):{" "}
+            <span className="font-bold">{formatPrice(details.expectedCash)}</span>
             <span className="text-stone-500"> · allowed difference {formatPrice(details.limit)}</span>
           </p>
           <label className="text-sm font-semibold">

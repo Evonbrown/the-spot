@@ -4,7 +4,8 @@
  * WHAT: The "Daily totals" table for a DATE RANGE (Step 35, FR-06 SR-6.5 /
  *       AC-6.5): one line per day (days with no sales show 0), then a Total
  *       line for the whole range. Columns: Date, Orders, Gross, Refunds, Net,
- *       Cash, Lynk.
+ *       Cash, Lynk. Step 38b: Refunds are the ones ISSUED that day, and Cash
+ *       and Lynk are NET (after that type's refunds), like the Total line.
  *
  * LAYER: Presentation. The numbers come from getSalesRange() (Application
  *        layer), worked out by the database (sales_range_summary, 0017).

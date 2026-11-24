@@ -1457,3 +1457,38 @@ Every report (paper and file) starts with the same header: **The Spot**, the rep
 - *Can the Manager verify a Lynk payment?* No: only the Supervisor (block 3).
 - *What if the customer says they paid but nothing is in Lynk?* The Supervisor marks it "not received"; counter staff see that before handing over the food. If the money shows up later, the Supervisor verifies it then.
 - *When does a Lynk order count in the sales summary?* From the moment the Supervisor verifies it (block 1).
+
+## Step 38b: Refunds + real refunds in the reports and closeout (FR-06, UC-07; SDS Refund)
+On `/supervisor`, under the Lynk list, a **Refunds** box:
+1. **Find order:** type the Order ID -> the order's customer, payment (Lynk / Cash, Paid / Refunded), **paid**, **refunded so far** and **can still refund**, plus earlier refunds.
+2. **Refund:** an amount ("Full refund" fills in what's left) and a **required reason** (10-500 characters) -> "Refund J$500 by Cash to Jane for #1043? It can't be undone. **Yes, refund** / Cancel". Afterwards: "Give the cash to the customer from the till" (cash) or "Send the money back ... in your Lynk app" (Lynk).
+3. **Refunds today:** amount, type, time, who, reason.
+
+The rules (server action AND database): **only the Supervisor**; only a **paid** order; more than J$0; **all refunds together never more than what was paid**; who + when recorded; a refund row can **never be changed or deleted**; no refund on a **closed day**. A fully refunded payment becomes **REFUNDED** (part = still PAID).
+
+**In the reports (decision A): a refund counts on the day it's ISSUED.** That day's Refunds (total, per payment type, per day in a range) go up, **net = gross − refunds**, and **expected cash = paid cash − cash refunds**, so the closeout count matches the till. A closed day's figures never change: a refund for yesterday's order is recorded today. The CSV and print reports show the same figures automatically.
+
+### Files
+| File | Layer | What it does |
+|---|---|---|
+| `supabase/migrations/0021_refunds.sql` | Data | **New.** REFUNDED status; `refunds` table (+ RLS: Supervisor + Manager read); `issue_refund()` (server only); refund lock + "never changed" trigger; payments lock allows PAID -> REFUNDED on a closed order day; `report_orders` (PAID or REFUNDED), `report_summary` and `sales_range_summary` with real refunds. |
+| `supabase/tests/0021_refunds_checks.sql` | Data | **New.** 14 checks: part refund + reports + expected cash, full refund -> REFUNDED, over the limit, someone refunded meanwhile, unpaid, reason, only the Supervisor, closed today, decision A on a closed past day, other changes still locked, never changed, who reads, no direct writes, cancelled Lynk order. |
+| `src/lib/payments/supervisor-rules.ts` | Application | `parseRefundAmount`, `refundableAmount` (cents), `checkRefund`, `readRefundReason`. |
+| `src/lib/payments/supervisor-actions.ts` | Application | `issueRefund` Server Action. |
+| `src/lib/payments/get-refunds.ts` | Application (server only) | **New.** `findOrderForRefund`, `getRefundsToday`. |
+| `src/components/RefundPanel.tsx` | Presentation (browser) | **New.** Find order, figures, refund form, confirmation, refunds today. |
+| `src/app/supervisor/page.tsx` | Presentation | Adds the Refunds box (`?refund=1043#refunds`). |
+| `src/lib/order-status.ts`, `src/components/DriverDeliveries.tsx`, `src/app/staff/orders/[id]/page.tsx` | – | "Refunded" payment status. |
+| `src/components/SalesSummary.tsx`, `DailyTotals.tsx`, `CloseoutPanel.tsx`, `src/lib/reports/*` | Presentation / Application | "J$0 until Step 38" placeholders replaced; "Refunds count on the day they're issued"; expected cash label. |
+
+### Key concepts
+- **Why REFUNDED orders still count in gross:** the sale happened on its day; the refund is taken off on the day it's issued. If a refunded order ALSO dropped out of gross, the money would be taken off twice.
+- **Locking the payment row ("for update"):** two refunds at the same moment can't both pass "not more than paid". And "refunded so far" is checked against what the Supervisor saw; if it changed, nothing is saved.
+- **An audit trail:** refunds are only ever ADDED (a trigger refuses changes and deletes), so the record of money going out can't be edited.
+- **A careful exception to the lock:** on a closed day only PAID -> REFUNDED is allowed for its payments (it doesn't change that day's figures); every other change is still refused.
+- **Cancelled orders:** a cancelled Lynk order that was paid can be refunded, but its refund isn't taken off sales (the order was never in sales).
+
+### Possible lecturer questions
+- *Can the Manager refund?* No, only the Supervisor (UC-07; block 7).
+- *Can a J$1,000 order be refunded J$1,200?* No: all refunds together can't exceed what was paid (blocks 2, 3).
+- *A customer brings back yesterday's meal after yesterday was closed: what happens?* The Supervisor refunds it today; it lowers TODAY's net and expected cash; yesterday's closed figures stay the same (block 9).

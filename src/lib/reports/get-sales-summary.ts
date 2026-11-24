@@ -33,7 +33,7 @@ export type MethodLine = {
   method: PaymentMethod;
   transactions: number;
   amount: number;
-  refunds: number; // J$0 until Step 38 (refunds table)
+  refunds: number; // this type's refunds ISSUED in the period (Step 38b)
   net: number;
   percent: number; // % of net sales, 1 decimal
 };
@@ -44,7 +44,7 @@ export type SalesSummary = {
   orders: number; // COUNTED orders: PAID, not cancelled / abandoned
   grossSales: number;
   deliveryFees: number; // part of gross sales
-  refunds: number; // J$0 until Step 38
+  refunds: number; // refunds ISSUED in the period (Step 38b, refunds table)
   netSales: number;
   cancelledCount: number;
   cancelledValue: number;
@@ -161,7 +161,7 @@ export type DayTotal = {
   day: string; // "2026-11-24"
   orders: number;
   grossSales: number;
-  refunds: number; // J$0 until Step 38
+  refunds: number; // refunds ISSUED in the period (Step 38b, refunds table)
   netSales: number;
   cash: number;
   lynk: number;

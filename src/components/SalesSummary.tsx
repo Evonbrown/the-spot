@@ -41,13 +41,14 @@ export default function SalesSummary({ summary }: { summary: Summary }) {
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Figure label="Orders (paid)" value={String(summary.orders)} />
           <Figure label="Gross sales" value={formatPrice(summary.grossSales)} />
-          {/* STEP 38: refunds come from the refunds table (J$0 until then). */}
+          {/* Step 38b: the Supervisor's refunds, on the day they were ISSUED. */}
           <Figure label="Refunds" value={formatPrice(summary.refunds)} />
           <Figure label="Net sales" value={formatPrice(summary.netSales)} big />
         </dl>
         <p className="mt-3 text-sm text-stone-600">
           Gross sales include {formatPrice(summary.deliveryFees)} in delivery fees. Only PAID orders count; cancelled
-          and abandoned orders never do.
+          and abandoned orders never do. Refunds count on the day they&apos;re issued: net sales = gross sales −
+          refunds.
         </p>
       </section>
 

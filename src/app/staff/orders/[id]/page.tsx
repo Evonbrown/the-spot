@@ -301,7 +301,15 @@ function OrderDetails({ order, drivers }: { order: StaffOrderDetails; drivers: D
               {order.payment ? (
                 <>
                   {PAYMENT_METHOD_LABELS[order.payment.method]} ·{" "}
-                  <span className={order.payment.status === "PAID" ? "text-green-700" : "text-amber-800"}>
+                  <span
+                    className={
+                      order.payment.status === "PAID"
+                        ? "text-green-700"
+                        : order.payment.status === "REFUNDED"
+                          ? "text-stone-600"
+                          : "text-amber-800"
+                    }
+                  >
                     {PAYMENT_STATUS_LABELS[order.payment.status]}
                   </span>
                 </>

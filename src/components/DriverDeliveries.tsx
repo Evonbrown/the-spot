@@ -172,7 +172,8 @@ function PaymentLine({ delivery }: { delivery: DriverDelivery }) {
   if (!payment) {
     return <p className="mt-3 rounded-lg bg-stone-100 p-3 text-sm">Payment not found: ask the counter.</p>;
   }
-  if (payment.status === "PAID") {
+  // PAID or REFUNDED (Step 38b): the money was already received.
+  if (payment.status !== "UNPAID") {
     return <p className="mt-3 rounded-lg bg-green-50 p-3 font-semibold text-green-900">Paid: nothing to collect.</p>;
   }
   if (payment.method === "CASH") {

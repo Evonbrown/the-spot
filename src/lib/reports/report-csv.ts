@@ -56,7 +56,7 @@ function summaryRows(summary: SalesSummary): Rows {
     ["Orders (paid)", summary.orders],
     ["Gross sales (J$)", money(summary.grossSales)],
     ["of which delivery fees (J$)", money(summary.deliveryFees)],
-    ["Refunds (J$)", money(summary.refunds)], // STEP 38: from the refunds table
+    ["Refunds (J$)", money(summary.refunds)], // refunds issued that day (Step 38b)
     ["Net sales (J$)", money(summary.netSales)],
     // AC-6.3: the payment-type totals must equal net sales.
     ["Payment totals match net sales", summary.totalsMatch ? "Yes" : "NO - please check"],
