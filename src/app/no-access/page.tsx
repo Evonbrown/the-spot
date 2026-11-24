@@ -18,7 +18,11 @@ export default function NoAccessPage() {
       <p className="text-5xl" aria-hidden="true">🔒</p>
       <h1 className="mt-4 text-2xl font-extrabold">You don&apos;t have access to this page</h1>
       {/* The button depends on WHO you are, so it waits for the login check */}
-      <Suspense fallback={null}>
+      <Suspense
+        fallback={
+          <div className="mx-auto mt-6 h-12 w-40 animate-pulse rounded-xl bg-stone-200" aria-hidden="true" />
+        }
+      >
         <BackButton />
       </Suspense>
     </main>

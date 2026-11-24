@@ -65,7 +65,10 @@ export default async function MenuPage() {
 
       {items === null ? (
         // The database could not be reached.
-        <MenuMessage text="Sorry, the menu couldn't load. Please refresh the page to try again." />
+        <MenuMessage
+          text="Sorry, the menu couldn't load. Please refresh the page to try again."
+          isError
+        />
       ) : items.length === 0 ? (
         // The table is empty (e.g. before the Manager adds items).
         <MenuMessage text="There are no menu items yet. Please check back soon." />
@@ -107,10 +110,17 @@ async function MenuForViewer({ items, customizations }: { items: MenuItem[]; cus
 
 /*
  * MenuMessage
- * A simple box for "couldn't load" / "no items yet" messages.
+ * A simple box for "couldn't load" (red alert) / "no items yet" messages.
  */
-function MenuMessage({ text }: { text: string }) {
+function MenuMessage({ text, isError = false }: { text: string; isError?: boolean }) {
   return (
-    <p className="mt-6 rounded-xl bg-white p-5 text-center text-stone-700 shadow-sm">{text}</p>
+    <p
+      role={isError ? "alert" : undefined}
+      className={`mt-6 rounded-xl p-5 text-center shadow-sm ${
+        isError ? "bg-red-50 text-red-900" : "bg-white text-stone-700"
+      }`}
+    >
+      {text}
+    </p>
   );
 }

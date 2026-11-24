@@ -95,7 +95,13 @@ async function StaffOrderContent({ params }: { params: Promise<{ id: string }> }
   try {
     order = await getOrderForStaff(id);
   } catch {
-    return <Message title="We couldn't load this order" text="Check the connection and refresh the page." />;
+    return (
+      <Message
+        title="We couldn't load this order"
+        text="Check the connection and refresh the page."
+        isError
+      />
+    );
   }
   if (!order) {
     return <Message title="Order not found" text="Check the order number and try again." />;
@@ -115,9 +121,12 @@ async function StaffOrderContent({ params }: { params: Promise<{ id: string }> }
   return <OrderDetails order={order} drivers={drivers} />;
 }
 
-function Message({ title, text }: { title: string; text: string }) {
+function Message({ title, text, isError = false }: { title: string; text: string; isError?: boolean }) {
   return (
-    <div className="mt-2 rounded-xl bg-white p-6 text-center shadow-sm">
+    <div
+      role={isError ? "alert" : undefined}
+      className="mt-2 rounded-xl bg-white p-6 text-center shadow-sm"
+    >
       <h1 className="text-2xl font-extrabold">{title}</h1>
       <p className="mt-2 text-stone-600">{text}</p>
     </div>

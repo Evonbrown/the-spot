@@ -98,6 +98,7 @@ async function OrderContent({ params }: { params: Promise<{ id: string }> }) {
       <Message
         title="We couldn't load your order"
         text="Please check your connection and refresh the page."
+        isError
       />
     );
   }
@@ -114,13 +115,24 @@ async function OrderContent({ params }: { params: Promise<{ id: string }> }) {
   return <OrderInvoice order={order} />;
 }
 
-/* Message: a simple white box with a title, a line of text and a menu link. */
-function Message({ title, text }: { title: string; text: string }) {
+/* Message: a simple white box with a title, a line of text and links to recover. */
+function Message({ title, text, isError = false }: { title: string; text: string; isError?: boolean }) {
   return (
-    <div className="mt-6 rounded-xl bg-white p-6 text-center shadow-sm">
+    <div
+      role={isError ? "alert" : undefined}
+      className="mt-6 rounded-xl bg-white p-6 text-center shadow-sm"
+    >
       <h1 className="text-2xl font-extrabold">{title}</h1>
       <p className="mt-2 text-stone-600">{text}</p>
-      <BackToMenu />
+      <div className="flex flex-wrap justify-center gap-x-4">
+        <BackToMenu />
+        <Link
+          href="/orders"
+          className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-stone-300 bg-white px-5 font-semibold hover:bg-stone-50"
+        >
+          My orders
+        </Link>
+      </div>
     </div>
   );
 }

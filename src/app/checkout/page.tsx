@@ -40,7 +40,15 @@ export default function CheckoutPage() {
     <main className="mx-auto w-full max-w-5xl px-4 pb-12">
       <h1 className="pt-6 text-3xl font-extrabold">Checkout</h1>
       <Suspense
-        fallback={<div className="mt-6 h-40 animate-pulse rounded-xl bg-stone-200" aria-hidden="true" />}
+        fallback={
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3" aria-hidden="true">
+            <div className="flex flex-col gap-6 lg:col-span-2">
+              <div className="h-40 animate-pulse rounded-xl bg-stone-200" />
+              <div className="h-40 animate-pulse rounded-xl bg-stone-200" />
+            </div>
+            <div className="h-56 animate-pulse rounded-xl bg-stone-200" />
+          </div>
+        }
       >
         <CheckoutContent />
       </Suspense>
@@ -62,10 +70,12 @@ async function CheckoutContent() {
   const profile = await requireRole(["customer"], { returnTo: "/checkout" });
 
   let locations: DeliveryLocation[] = [];
+  let locationsLoadError = false;
   try {
     locations = await getDeliveryLocations();
   } catch {
     locations = []; // the form then offers pickup only
+    locationsLoadError = true;
   }
 
   let madeToOrderItemIds: number[] = [];
@@ -77,13 +87,20 @@ async function CheckoutContent() {
   }
 
   return (
-    <CheckoutForm
-      customerName={profile.full_name || profile.email}
-      phone={profile.phone}
-      locations={locations}
-      madeToOrderItemIds={madeToOrderItemIds}
-      hours={getOpeningHours()}
-      isTestHours={isIgnoreOpeningHoursOn()}
-    />
+    <>
+      {locationsLoadError && (
+        <p role="note" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+          We couldn&apos;t load delivery locations right now, so only pickup is available. Refresh to try again.
+        </p>
+      )}
+      <CheckoutForm
+        customerName={profile.full_name || profile.email}
+        phone={profile.phone}
+        locations={locations}
+        madeToOrderItemIds={madeToOrderItemIds}
+        hours={getOpeningHours()}
+        isTestHours={isIgnoreOpeningHoursOn()}
+      />
+    </>
   );
 }
